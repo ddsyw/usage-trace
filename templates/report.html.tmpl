@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>codex-find · {{KEYWORD}}</title>
+<style>
+  body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;color:#0f172a}
+  header{background:#1e293b;color:#fff;padding:12px 18px;font-size:14px}
+  header b{font-size:16px}
+  section{padding:14px 18px;border-top:1px solid #e2e8f0}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}
+  th,td{border:1px solid #e2e8f0;padding:5px 8px;text-align:left;vertical-align:top}
+  th{background:#f1f5f9}
+  code{background:#f1f5f9;padding:1px 4px;border-radius:3px}
+  .notes{font-size:12px;color:#475569}
+  .node-Controller{fill:#e8f0fe;stroke:#3b82f6}
+  .node-Service{fill:#fef3c7;stroke:#d97706}
+  .node-Repository{fill:#dcfce7;stroke:#16a34a}
+  .node-Table{fill:#f3e8ff;stroke:#9333ea}
+  text{font:11px sans-serif}
+</style>
+</head>
+<body>
+<header>
+  <b>{{KEYWORD}}</b> · {{PROJECT}} · {{LANGUAGE}} · {{GENERATED_AT}} ·
+  usages {{USAGES}} / tables {{TABLES}} / depth {{DEPTH}}
+</header>
+<section>
+  <div class="label">调用链 (主图 · 分层左→右)</div>
+  {{SVG}}
+</section>
+<section>
+  <details>
+    <summary>显示网络全景 (径向)</summary>
+    {{PANORAMA_SVG}}
+  </details>
+</section>
+<section>
+  <div class="label">涉及表</div>
+  {{TABLES_HTML}}
+</section>
+<section>
+  <div class="label">使用位置</div>
+  {{USAGES_HTML}}
+</section>
+<section class="notes">{{NOTES}}</section>
+</body>
+</html>
