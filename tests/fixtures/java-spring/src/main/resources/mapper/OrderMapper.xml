@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.mapper.OrderMapper">
+  <select id="selectByStoreNo" resultType="object">
+    SELECT * FROM t_order WHERE store_no = #{storeNo}
+  </select>
+</mapper>
