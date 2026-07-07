@@ -1,6 +1,7 @@
 # usage-trace
 
-[English](#usage-trace) | [中文](#中文版)
+<details open>
+<summary><strong>English</strong></summary>
 
 `usage-trace` is a local code-analysis CLI and Claude Code subagent for tracing a
 field or identifier through a Java codebase. Given a keyword such as `orderId` or
@@ -237,8 +238,12 @@ tests/                             Unit, integration, and fixture tests
 - Very large projects may need a lower `--max-nodes` value or narrower keyword
   variants to keep reports readable.
 
+</details>
 
 ---
+
+<details>
+<summary><strong>中文</strong></summary>
 
 ## 中文版
 
@@ -464,3 +469,5 @@ tests/                             单元测试、集成测试和示例项目
 - 调用链是静态启发式分析；反射、运行时代理、动态 SQL 和复杂依赖注入可能需要人工复核。
 - 暂不支持非 Java 项目的完整调用链追踪。
 - 对于非常大的项目，可以降低 `--max-nodes` 或收窄关键字变体，让报告更易读。
+
+</details>
