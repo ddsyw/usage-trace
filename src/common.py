@@ -61,6 +61,30 @@ def load_graph(s: str | bytes) -> dict:
     return json.loads(s)
 
 
+# ---- Layer classification ----
+def _annotation_match(pattern: str, text: str) -> bool:
+    annotations = {f"@{m.group(1)}" for m in re.finditer(r"@(?:[\w.]+\.)?(\w+)", text)}
+    for part in re.split(r"\|", pattern):
+        token = part.strip("() ")
+        if token.startswith("@") and token in annotations:
+            return True
+    return False
+
+
+def classify_layer(file: str, layers: list[dict], text: str | None = None) -> str:
+    """Classify a source file by ordered layer path hints and optional content matches."""
+    fpath = str(file).replace("\\", "/")
+    text = text or ""
+    for layer in layers:
+        hint = layer.get("path_hint")
+        match = layer.get("match")
+        if hint and re.search(hint, fpath, re.IGNORECASE):
+            return layer["name"]
+        if match and (re.search(match, text) or _annotation_match(match, text)):
+            return layer["name"]
+    return "Unknown"
+
+
 # ---- Grep wrapper ----
 def has_ripgrep() -> bool:
     return shutil.which("rg") is not None

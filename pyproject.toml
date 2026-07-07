@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codex-find"
+version = "0.1.0"
+description = "Trace keyword usage, call chains, and database tables in Java/Spring projects."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+codex-find = "codex_find:main"
+
+[tool.setuptools]
+py-modules = ["codex_find", "common", "discover", "graph", "render", "tables", "trace"]
+
+[tool.setuptools.package-dir]
+"" = "src"

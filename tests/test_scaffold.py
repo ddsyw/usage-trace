@@ -1,6 +1,3 @@
-from pathlib import Path
-
-
 def test_fixture_files_exist(fixture_root):
     expected = [
         "pom.xml",
@@ -22,3 +19,9 @@ def test_fixture_store_no_chain_present(fixture_root):
     assert "queryByStoreNo" in ctrl and "storeNo" in ctrl
     assert "findByStoreNo" in svc and "storeNo" in svc
     assert "selectByStoreNo" in mp and "t_order" in mp and "store_no" in mp
+
+
+def test_pyproject_declares_console_script(profiles_dir):
+    text = (profiles_dir.parent / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'name = "codex-find"' in text
+    assert 'codex-find = "codex_find:main"' in text

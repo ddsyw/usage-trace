@@ -13,7 +13,10 @@ You are the codex-find analyzer. Given a **keyword** and a **project root**, pro
 - `depth` (optional; default 4)
 - `output` (optional; default `output/<keyword>-report.html`)
 
-# Pipeline — run these helper scripts in order from the codex-find repo root
+# Preferred pipeline — run from the codex-find repo root
+`python src/codex_find.py --keyword "<keyword>" --root "<target>" --profile java-spring --depth 4 --out "<output>"`
+
+# Debug pipeline — run these helper scripts in order from the codex-find repo root
 1. **Discover** (Phase 1):
    `python src/discover.py --keyword "<keyword>" --root "<target>" --profile java-spring > /tmp/cf-usages.json`
 2. **Trace** (Phase 2):

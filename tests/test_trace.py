@@ -7,7 +7,10 @@ from trace import walk, find_enclosing_unit, trace
 
 def test_walk_detects_cycle_and_terminates():
     graph = {"A": ["B"], "B": ["A"]}
-    neighbors = lambda node, direction: graph.get(node, [])
+
+    def neighbors(node, direction):
+        return graph.get(node, [])
+
     reached, edges = walk(["A"], neighbors, depth=4)
     assert reached == {"A", "B"}
     assert ("A", "B", "confirmed") in edges
@@ -16,7 +19,10 @@ def test_walk_detects_cycle_and_terminates():
 
 def test_walk_respects_depth():
     chain = {"A": ["B"], "B": ["C"], "C": ["D"], "D": ["E"], "E": []}
-    neighbors = lambda node, direction: chain.get(node, [])
+
+    def neighbors(node, direction):
+        return chain.get(node, [])
+
     reached, _ = walk(["A"], neighbors, depth=2)
     assert reached == {"A", "B", "C"}  # 2 hops: A->B->C
 
@@ -24,7 +30,10 @@ def test_walk_respects_depth():
 def test_walk_depth_hard_cap():
     chain = {f"n{i}": [f"n{i+1}"] for i in range(20)}
     chain["n20"] = []
-    neighbors = lambda node, d: chain.get(node, [])
+
+    def neighbors(node, direction):
+        return chain.get(node, [])
+
     reached, _ = walk(["n0"], neighbors, depth=100)
     assert reached == {f"n{i}" for i in range(9)}  # hard cap 8 hops
 
@@ -64,3 +73,50 @@ def test_trace_fixture_chain(fixture_root, profiles_dir):
         return any(e["from"] == frm and e["to"] == to for e in g["edges"])
     assert has("OrderController.queryByStoreNo", "OrderService.findByStoreNo")
     assert has("OrderService.findByStoreNo", "OrderMapper.selectByStoreNo")
+
+
+def test_trace_avoids_same_name_false_edges_and_duplicates(fixture_root, profiles_dir):
+    profile = load_profile("java-spring", profiles_dir)
+    usages = discover("storeNo", fixture_root, profile)
+    g = trace(usages, fixture_root, profile, depth=4)
+    edges = {(e["from"], e["to"], e["kind"], e["confidence"]) for e in g["edges"]}
+
+    assert len(edges) == len(g["edges"])
+    assert (
+        "OrderController.queryByStoreNo",
+        "OrderService.findByStoreNo",
+        "call",
+        "confirmed",
+    ) in edges
+    assert (
+        "OrderService.findByStoreNo",
+        "OrderMapper.selectByStoreNo",
+        "call",
+        "confirmed",
+    ) in edges
+    assert not any(
+        e["to"] == "StoreService.findByStoreNo" and e["from"] != "StoreService.findByStoreNo"
+        for e in g["edges"]
+    )
+
+
+def test_trace_uses_annotation_match_for_layer(tmp_path, profiles_dir):
+    source = tmp_path / "src/main/java/com/example/app/OrderLogic.java"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "package com.example.app;\n"
+        "@org.springframework.stereotype.Service\n"
+        "public class OrderLogic {\n"
+        "  public Object findByStoreNo(String storeNo) {\n"
+        "    return storeNo;\n"
+        "  }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    profile = load_profile("java-spring", profiles_dir)
+    usages = discover("storeNo", tmp_path, profile)
+
+    g = trace(usages, tmp_path, profile, depth=1)
+
+    node = next(n for n in g["nodes"] if n["label"] == "OrderLogic.findByStoreNo")
+    assert node["layer"] == "Service"

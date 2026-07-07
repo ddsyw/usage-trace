@@ -13,7 +13,9 @@ def _fixture_graph():
     b = add_node(g, {"kind": "unit", "label": "OrderService.findByStoreNo", "layer": "Service"})
     c = add_node(g, {"kind": "unit", "label": "OrderMapper.selectByStoreNo", "layer": "Repository"})
     d = add_node(g, {"kind": "table", "label": "t_order", "layer": "Table", "table": "t_order", "op": "select"})
-    add_edge(g, a, b); add_edge(g, b, c); add_edge(g, c, d, "references")
+    add_edge(g, a, b)
+    add_edge(g, b, c)
+    add_edge(g, c, d, "references")
     prune_and_layout(g, 300, ["Controller", "Service", "Repository", "Table"])
     return g
 

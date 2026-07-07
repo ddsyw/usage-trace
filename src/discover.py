@@ -7,12 +7,12 @@ import re
 import sys
 from pathlib import Path
 
-from common import grep, load_profile
+from common import classify_layer, grep, load_profile
 
 _CONTROL = {"if", "for", "while", "switch", "catch", "return", "new", "super", "this"}
 
 
-def keyword_variants(keyword: str) -> list[str]:
+def keyword_variants(keyword: str, extra_variants: list[str] | None = None) -> list[str]:
     """Expand a keyword into common naming variants (longest first)."""
     parts = [p for p in re.split(r"[_\-]+|(?<=[a-z0-9])(?=[A-Z])", keyword) if p] or [keyword]
     lower = "_".join(p.lower() for p in parts)
@@ -26,17 +26,13 @@ def keyword_variants(keyword: str) -> list[str]:
         lower + "s",                            # store_nos
         lower + "_list",
     }
+    variants.update(v.strip() for v in (extra_variants or []) if v.strip())
     return sorted(variants, key=len, reverse=True)
 
 
-def layer_of(file: str, layers: list[dict]) -> str:
-    """Classify a file by its path (package) against layer path_hints."""
-    fpath = str(file).replace("\\", "/")
-    for L in layers:
-        hint = L.get("path_hint")
-        if hint and re.search(hint, fpath, re.IGNORECASE):
-            return L["name"]
-    return "Unknown"
+def layer_of(file: str, layers: list[dict], text: str | None = None) -> str:
+    """Classify a file by path and optional profile annotation/content matches."""
+    return classify_layer(file, layers, text)
 
 
 def _occurrence_type(text: str, match: re.Match) -> str:
@@ -52,21 +48,62 @@ def _occurrence_type(text: str, match: re.Match) -> str:
     return "identifier"
 
 
-def discover(keyword: str, root: Path, profile: dict) -> list[dict]:
-    variants = keyword_variants(keyword)
+def _line_comment_start(text: str) -> int | None:
+    quote = ""
+    escaped = False
+    for i, ch in enumerate(text):
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if quote:
+            if ch == quote:
+                quote = ""
+            continue
+        if ch in {"'", '"'}:
+            quote = ch
+            continue
+        if ch == "/" and i + 1 < len(text) and text[i + 1] == "/":
+            return i
+    return None
+
+
+def _code_portion(text: str) -> str:
+    stripped = text.lstrip()
+    if stripped.startswith(("/*", "*")):
+        return ""
+    comment_at = _line_comment_start(text)
+    return text if comment_at is None else text[:comment_at]
+
+
+def discover(keyword: str, root: Path, profile: dict,
+             extra_variants: list[str] | None = None) -> list[dict]:
+    variants = keyword_variants(keyword, extra_variants)
     pattern = "|".join(re.escape(v) for v in variants)
     exclude = profile.get("exclude", {}).get("dirs", [])
     layers = profile.get("layers", [])
     sites: list[dict] = []
+    file_text_cache: dict[str, str] = {}
     for h in grep(pattern, Path(root), "*", exclude):
-        m = re.search(pattern, h["text"])
+        code = _code_portion(h["text"])
+        m = re.search(pattern, code)
+        if not m:
+            continue
+        if h["file"] not in file_text_cache:
+            try:
+                file_text_cache[h["file"]] = Path(h["file"]).read_text(
+                    encoding="utf-8", errors="replace")
+            except OSError:
+                file_text_cache[h["file"]] = ""
         otype = _occurrence_type(h["text"], m) if m else "identifier"
         sites.append({
             "file": h["file"],
             "line": h["line"],
-            "col": h["col"],
+            "col": m.start() + 1,
             "occurrence_type": otype,
-            "layer": layer_of(h["file"], layers),
+            "layer": layer_of(h["file"], layers, file_text_cache[h["file"]]),
             "snippet": h["text"].strip(),
         })
     return sites
@@ -82,7 +119,8 @@ def main() -> None:
     args = ap.parse_args()
     profiles_dir = Path(__file__).resolve().parent.parent / "profiles"
     profile = load_profile(args.profile, profiles_dir)
-    sites = discover(args.keyword, Path(args.root), profile)
+    extra_variants = [v.strip() for v in args.variants.split(",") if v.strip()]
+    sites = discover(args.keyword, Path(args.root), profile, extra_variants)
     json.dump(sites, sys.stdout, ensure_ascii=False, indent=2)
 
 

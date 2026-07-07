@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from common import add_edge, add_node, grep, load_profile, new_graph
+from common import add_edge, add_node, classify_layer, grep, load_profile, new_graph
 
 HARD_DEPTH_CAP = 8
 # A Java method signature: <modifiers/type> name(params) [throws ...] { or ;
@@ -53,6 +53,11 @@ def _current_class(lines: list[str], upto: int) -> str | None:
     return cls
 
 
+def _class_name(unit: dict) -> str | None:
+    qual = unit.get("id") or unit.get("qualname") or ""
+    return qual.split(".", 1)[0] if "." in qual else None
+
+
 def find_enclosing_unit(file: Path, target_line: int) -> dict | None:
     try:
         lines = Path(file).read_text(encoding="utf-8", errors="replace").splitlines()
@@ -86,41 +91,82 @@ def find_enclosing_unit(file: Path, target_line: int) -> dict | None:
 
 
 def _layer_of_file(file: str, layers: list[dict]) -> str:
-    fpath = str(file).replace("\\", "/")
-    for L in layers:
-        hint = L.get("path_hint")
-        if hint and re.search(hint, fpath, re.IGNORECASE):
-            return L["name"]
-    return "Unknown"
+    try:
+        text = Path(file).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    return classify_layer(file, layers, text)
 
 
-def _callees_in_unit(unit: dict, profile: dict) -> list[str]:
+def _symbol_types(unit: dict) -> dict[str, str]:
+    try:
+        lines = Path(unit["file"]).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return {}
+    cls = _class_name(unit)
+    types = {"this": cls} if cls else {}
+    field_rx = re.compile(
+        r"\b(?:private|protected|public)?\s*(?:final\s+)?([A-Z]\w*)\s+([A-Za-z_]\w*)\s*(?:[=;])"
+    )
+    for ln in lines:
+        m = field_rx.search(_strip_comment(ln))
+        if m:
+            types[m.group(2)] = m.group(1)
+    sig = _strip_comment(lines[unit["line"] - 1]) if unit.get("line") else ""
+    params = sig[sig.find("(") + 1:sig.rfind(")")] if "(" in sig and ")" in sig else ""
+    for part in params.split(","):
+        bits = part.strip().split()
+        if len(bits) >= 2 and re.match(r"[A-Z]\w*", bits[-2]):
+            types[bits[-1]] = bits[-2]
+    return types
+
+
+def _callee_refs_in_unit(unit: dict, profile: dict) -> list[tuple[str, str | None]]:
     patterns = profile.get("call_patterns", {})
-    regs = []
-    if "method_invocation" in patterns:
-        regs.append(re.compile(patterns["method_invocation"]))
-    if "chain_step" in patterns:
-        regs.append(re.compile(patterns["chain_step"]))
+    method_rx = re.compile(patterns.get("method_invocation", r"\b([A-Za-z_][\w]*)\s*\("))
+    chained_rx = re.compile(r"\b([A-Za-z_]\w*)\s*\.\s*([A-Za-z_]\w*)\s*\(")
     try:
         lines = Path(unit["file"]).read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return []
     body = lines[unit["line"] - 1: unit["end_line"]]
-    names: list[str] = []
-    seen: set[str] = set()
-    for ln in body:
+    refs: list[tuple[str, str | None]] = []
+    seen: set[tuple[str, str | None]] = set()
+    for offset, ln in enumerate(body):
         seg = _strip_comment(ln)
-        for rx in regs:
-            for m in rx.finditer(seg):
-                nm = m.group(1)
-                if nm in _CONTROL or nm in seen:
-                    continue
-                seen.add(nm)
-                names.append(nm)
-    return names
+        if offset == 0 and "{" in seg:
+            seg = seg.split("{", 1)[1]
+        elif offset == 0:
+            continue
+        chained_spans = []
+        for m in chained_rx.finditer(seg):
+            receiver, nm = m.group(1), m.group(2)
+            if nm in _CONTROL:
+                continue
+            ref = (nm, receiver)
+            if ref not in seen:
+                seen.add(ref)
+                refs.append(ref)
+            chained_spans.append((m.start(2), m.end(2)))
+        for m in method_rx.finditer(seg):
+            nm = m.group(1)
+            if nm in _CONTROL:
+                continue
+            if any(start <= m.start(1) < end for start, end in chained_spans):
+                continue
+            ref = (nm, None)
+            if ref not in seen:
+                seen.add(ref)
+                refs.append(ref)
+    return refs
 
 
-def _resolve_definition(method_name: str, root: Path, exclude: list[str]) -> list[dict]:
+def _callees_in_unit(unit: dict, profile: dict) -> list[str]:
+    return [name for name, _receiver in _callee_refs_in_unit(unit, profile)]
+
+
+def _resolve_definition(method_name: str, root: Path, exclude: list[str],
+                        target_class: str | None = None) -> list[dict]:
     """Find units whose declared method name == method_name (definition lines)."""
     pat = rf"\b{re.escape(method_name)}\s*\("
     hits = grep(pat, root, "*", exclude)
@@ -129,10 +175,29 @@ def _resolve_definition(method_name: str, root: Path, exclude: list[str]) -> lis
     for h in hits:
         u = find_enclosing_unit(Path(h["file"]), h["line"])
         if u and u["name"] == method_name and u["line"] == h["line"]:
+            if target_class and u["id"] != f"{target_class}.{method_name}":
+                continue
             if u["id"] not in seen:
                 seen.add(u["id"])
                 out.append(u)
     return out
+
+
+def _receiver_for_call(text: str, method_name: str) -> str | None:
+    m = re.search(rf"\b([A-Za-z_]\w*)\s*\.\s*{re.escape(method_name)}\s*\(", _strip_comment(text))
+    return m.group(1) if m else None
+
+
+def _matches_target_call(caller: dict, hit_text: str, target: dict) -> bool:
+    if caller["line"] == target["line"] and Path(caller["file"]) == Path(target["file"]):
+        return False
+    if caller["line"] == target["line"] and caller["name"] == target["name"]:
+        return False
+    target_class = _class_name(target)
+    receiver = _receiver_for_call(hit_text, target["name"])
+    if receiver:
+        return _symbol_types(caller).get(receiver) == target_class
+    return _class_name(caller) == target_class
 
 
 def _callers_of(unit: dict, root: Path, exclude: list[str]) -> list[dict]:
@@ -144,7 +209,8 @@ def _callers_of(unit: dict, root: Path, exclude: list[str]) -> list[dict]:
         if Path(h["file"]) == Path(unit["file"]) and h["line"] == unit["line"]:
             continue  # the definition itself, not a call
         enc = find_enclosing_unit(Path(h["file"]), h["line"])
-        if enc and enc["id"] != unit["id"] and enc["id"] not in seen:
+        if enc and enc["id"] != unit["id"] and enc["id"] not in seen \
+                and _matches_target_call(enc, h["text"], unit):
             seen.add(enc["id"])
             callers.append(enc)
     return callers
@@ -178,8 +244,10 @@ def trace(usages: list[dict], root: Path, profile: dict, depth: int = 4) -> dict
         if not u:
             return []
         out: list[str] = []
-        for name in _callees_in_unit(u, profile):
-            for tgt in _resolve_definition(name, root, exclude):
+        types = _symbol_types(u)
+        for name, receiver in _callee_refs_in_unit(u, profile):
+            target_class = types.get(receiver) if receiver else _class_name(u)
+            for tgt in _resolve_definition(name, root, exclude, target_class):
                 if tgt["id"] == uid:
                     continue
                 if tgt["id"] not in known:
@@ -198,9 +266,28 @@ def trace(usages: list[dict], root: Path, profile: dict, depth: int = 4) -> dict
             out.append(c["id"])
         return out
 
+    def walk_calls(seeds_: list[str], neighbors: Callable[[str, str], list[str]],
+                   depth_: int) -> list[tuple[str, str, str]]:
+        depth_ = min(depth_, HARD_DEPTH_CAP)
+        visited: set[str] = set()
+        edges_: list[tuple[str, str, str]] = []
+        frontier = [(s, 0) for s in seeds_]
+        while frontier:
+            node, d = frontier.pop(0)
+            if node in visited or d >= depth_:
+                continue
+            visited.add(node)
+            for nb in neighbors(node, "down"):
+                if nb == node:
+                    continue
+                edges_.append((node, nb, "confirmed"))
+                if nb not in visited:
+                    frontier.append((nb, d + 1))
+        return edges_
+
     seed_list = [u["id"] for u in seeds]
-    _, down_edges = walk(seed_list, neighbors_down, depth)
-    _, up_edges = walk(seed_list, neighbors_up, depth)
+    down_edges = walk_calls(seed_list, neighbors_down, depth)
+    up_edges = walk_calls(seed_list, neighbors_up, depth)
 
     for uid, u in known.items():
         add_node(g, {
@@ -209,11 +296,18 @@ def trace(usages: list[dict], root: Path, profile: dict, depth: int = 4) -> dict
             "file": u["file"], "line": u["line"],
             "usages": usage_by_unit.get(uid, []),
         })
+    seen_edges: set[tuple[str, str, str]] = set()
     for frm, to, conf in down_edges:
-        add_edge(g, frm, to, "call", conf)
+        key = (frm, to, "call")
+        if key not in seen_edges:
+            seen_edges.add(key)
+            add_edge(g, frm, to, "call", conf)
     # up_edges: walk emitted (unit -> caller); flip so edge is caller -> callee
     for frm, to, conf in up_edges:
-        add_edge(g, to, frm, "call", conf)
+        key = (to, frm, "call")
+        if key not in seen_edges:
+            seen_edges.add(key)
+            add_edge(g, to, frm, "call", conf)
     return g
 
 

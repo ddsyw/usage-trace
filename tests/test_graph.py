@@ -18,7 +18,8 @@ def test_layout_assigns_col_and_row():
     a = add_node(g, {"kind": "unit", "label": "A", "layer": "Controller"})
     b = add_node(g, {"kind": "unit", "label": "B", "layer": "Service"})
     c = add_node(g, {"kind": "table", "label": "t", "layer": "Table"})
-    add_edge(g, a, b); add_edge(g, b, c)
+    add_edge(g, a, b)
+    add_edge(g, b, c)
     prune_and_layout(g, max_nodes=300,
                      layer_order=["Controller", "Service", "Repository", "Table"])
     by_id = {n["id"]: n for n in g["nodes"]}
