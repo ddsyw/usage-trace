@@ -1,0 +1,38 @@
+{
+  "name": "usage-trace",
+  "version": "0.1.0",
+  "description": "Trace Java field usage, call chains, and database tables with an offline HTML report.",
+  "author": {
+    "name": "ddsyw",
+    "url": "https://github.com/ddsyw"
+  },
+  "homepage": "https://github.com/ddsyw/usage-trace#readme",
+  "repository": "https://github.com/ddsyw/usage-trace",
+  "keywords": [
+    "java",
+    "code-analysis",
+    "call-chain",
+    "database",
+    "claude-code",
+    "codex-plugin"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "usage-trace",
+    "shortDescription": "Trace Java field usage, call chains, and database tables.",
+    "longDescription": "Analyze a Java/Spring or plain Java project for a keyword such as orderId, then generate a single offline HTML report with usage sites, call chain, and database table access.",
+    "developerName": "ddsyw",
+    "category": "Productivity",
+    "capabilities": [
+      "Code Analysis",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/ddsyw/usage-trace",
+    "defaultPrompt": [
+      "usage-trace --keyword orderId --root . --out /tmp/orderId-report.html",
+      "Analyze storeNo usage in the current Java project.",
+      "Trace a Java field and summarize touched database tables."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

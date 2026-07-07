@@ -146,6 +146,27 @@ agent 应执行：
 usage-trace --keyword orderId --root . --profile auto --depth 4 --out /tmp/orderId-report.html
 ```
 
+## Codex Plugin 用法
+
+当前仓库也包含 Codex plugin 元数据：
+
+```text
+.codex-plugin/plugin.json
+skills/usage-trace/SKILL.md
+```
+
+在支持从 GitHub 仓库安装 plugin 的 Codex 环境中，打开 `/plugin`，安装：
+
+```text
+https://github.com/ddsyw/usage-trace.git
+```
+
+安装后建议开启一个新的 Codex 会话，然后输入：
+
+```text
+使用 usage-trace 分析当前 Java 项目的 orderId，并生成 /tmp/orderId-report.html。
+```
+
 ## 报告内容
 
 生成的 HTML 报告包含：

@@ -156,6 +156,28 @@ The agent should run:
 usage-trace --keyword orderId --root . --profile auto --depth 4 --out /tmp/orderId-report.html
 ```
 
+## Codex Plugin
+
+This repository also includes Codex plugin metadata:
+
+```text
+.codex-plugin/plugin.json
+skills/usage-trace/SKILL.md
+```
+
+In Codex environments that support plugin installation from a GitHub repository,
+open `/plugin` and install:
+
+```text
+https://github.com/ddsyw/usage-trace.git
+```
+
+After installation, start a new Codex thread and ask:
+
+```text
+Use usage-trace to analyze orderId in the current Java project and generate /tmp/orderId-report.html.
+```
+
 ## Report Contents
 
 The generated HTML report includes:
