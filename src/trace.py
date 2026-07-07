@@ -293,7 +293,7 @@ def trace(usages: list[dict], root: Path, profile: dict, depth: int = 4) -> dict
         add_node(g, {
             "id": uid, "kind": "unit", "label": uid,
             "layer": _layer_of_file(u["file"], layers),
-            "file": u["file"], "line": u["line"],
+            "file": u["file"], "line": u["line"], "end_line": u["end_line"],
             "usages": usage_by_unit.get(uid, []),
         })
     seen_edges: set[tuple[str, str, str]] = set()

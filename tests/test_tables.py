@@ -210,3 +210,37 @@ def test_raw_sql_does_not_match_only_on_generic_class_or_table_terms(tmp_path, p
 
     table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
     assert table_nodes == []
+
+
+def test_resolves_java_sql_literals_in_traced_unit(tmp_path, profiles_dir):
+    dao = tmp_path / "src/main/java/demo/dao/OrderDao.java"
+    dao.parent.mkdir(parents=True)
+    dao.write_text(
+        """package demo.dao;
+
+public class OrderDao {
+    public Object selectByStoreNo(String storeNo) {
+        String sql = "SELECT * FROM t_order WHERE store_no = ?";
+        return sql;
+    }
+}
+""",
+        encoding="utf-8",
+    )
+    profile = load_profile("java-generic", profiles_dir)
+    g = new_graph({})
+    add_node(g, {
+        "id": "OrderDao.selectByStoreNo",
+        "kind": "unit",
+        "label": "OrderDao.selectByStoreNo",
+        "layer": "Repository",
+        "file": str(dao),
+        "line": 4,
+        "end_line": 7,
+    })
+
+    resolve_tables(g, tmp_path, profile)
+
+    table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
+    assert len(table_nodes) == 1
+    assert table_nodes[0]["table"] == "t_order"

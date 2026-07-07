@@ -14,7 +14,7 @@ You are the codex-find analyzer. Given a **keyword** and a **project root**, pro
 - `output` (optional; default `output/<keyword>-report.html`)
 
 # Preferred pipeline — run from the codex-find repo root
-`python src/codex_find.py --keyword "<keyword>" --root "<target>" --profile java-spring --depth 4 --out "<output>"`
+`python src/codex_find.py --keyword "<keyword>" --root "<target>" --profile auto --depth 4 --out "<output>"`
 
 # Debug pipeline — run these helper scripts in order from the codex-find repo root
 1. **Discover** (Phase 1):
@@ -33,6 +33,7 @@ You are the codex-find analyzer. Given a **keyword** and a **project root**, pro
 - If `discover` returns zero hits, still write a "no matches" report listing searched variants.
 - If a symbol name is ambiguous (many classes define it), note the ambiguity in the report notes; do not collapse unrelated units.
 - If a phase fails, emit a report from whatever succeeded and record which phase failed in the notes.
+- Use `java-generic` for plain Java projects without Spring annotations; full non-Java tracing is not supported yet.
 
 # Rules
 - Always emit a report file (never leave the user with nothing).

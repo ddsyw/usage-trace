@@ -3,6 +3,66 @@ import sys
 from codex_find import main, run
 
 
+def _write_generic_java_project(root):
+    (root / "pom.xml").write_text("<project></project>\n", encoding="utf-8")
+    api_dir = root / "src/main/java/demo/api"
+    service_dir = root / "src/main/java/demo/service"
+    dao_dir = root / "src/main/java/demo/dao"
+    api_dir.mkdir(parents=True)
+    service_dir.mkdir(parents=True)
+    dao_dir.mkdir(parents=True)
+    (api_dir / "OrderApi.java").write_text(
+        """package demo.api;
+
+import demo.service.OrderService;
+
+public class OrderApi {
+    private final OrderService orderService;
+
+    public OrderApi(OrderService orderService) {
+        this.orderService = orderService;
+    }
+
+    public Object queryByStoreNo(String storeNo) {
+        return orderService.findByStoreNo(storeNo);
+    }
+}
+""",
+        encoding="utf-8",
+    )
+    (service_dir / "OrderService.java").write_text(
+        """package demo.service;
+
+import demo.dao.OrderDao;
+
+public class OrderService {
+    private final OrderDao orderDao;
+
+    public OrderService(OrderDao orderDao) {
+        this.orderDao = orderDao;
+    }
+
+    public Object findByStoreNo(String storeNo) {
+        return orderDao.selectByStoreNo(storeNo);
+    }
+}
+""",
+        encoding="utf-8",
+    )
+    (dao_dir / "OrderDao.java").write_text(
+        """package demo.dao;
+
+public class OrderDao {
+    public Object selectByStoreNo(String storeNo) {
+        String sql = "SELECT * FROM t_order WHERE store_no = ?";
+        return sql;
+    }
+}
+""",
+        encoding="utf-8",
+    )
+
+
 def test_run_writes_full_report(fixture_root, tmp_path):
     out = tmp_path / "storeNo-report.html"
 
@@ -14,6 +74,21 @@ def test_run_writes_full_report(fixture_root, tmp_path):
     assert "OrderService.findByStoreNo" in html
     assert "OrderMapper.selectByStoreNo" in html
     assert "t_order" in html
+    assert graph["meta"]["counts"]["tables"] == 1
+
+
+def test_run_supports_generic_java_project_with_auto_profile(tmp_path):
+    _write_generic_java_project(tmp_path)
+    out = tmp_path / "generic-report.html"
+
+    graph = run("storeNo", tmp_path, out=out)
+
+    html = out.read_text(encoding="utf-8")
+    assert "OrderApi.queryByStoreNo" in html
+    assert "OrderService.findByStoreNo" in html
+    assert "OrderDao.selectByStoreNo" in html
+    assert "t_order" in html
+    assert graph["meta"]["profile"] == "java-generic"
     assert graph["meta"]["counts"]["tables"] == 1
 
 

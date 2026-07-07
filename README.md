@@ -27,13 +27,17 @@ python3 -m pip install -e ".[dev]"
 codex-find --keyword storeNo --root tests/fixtures/java-spring --out output/storeNo-report.html
 ```
 
+The default profile is `auto`. Java/Spring projects are analyzed with `java-spring`;
+plain Java projects are analyzed with `java-generic`.
+
 ## Options
 
 ```bash
 python src/codex_find.py --keyword <identifier> --root <project> [options]
 ```
 
-- `--profile java-spring`: language profile, default `java-spring`
+- `--profile auto`: language profile, default `auto`; available Java profiles are
+  `java-spring` and `java-generic`
 - `--depth 4`: call-chain depth, hard-capped in code
 - `--max-nodes 300`: maximum rendered graph nodes
 - `--variants a,b,c`: extra keyword variants to search
@@ -54,3 +58,11 @@ The lower-level phase scripts still exist for debugging:
 3. `src/tables.py`
 4. `src/graph.py`
 5. `src/render.py`
+
+## Support Matrix
+
+- Java/Spring: keyword usage, call chain, MyBatis XML, MyBatis annotation SQL,
+  JPA repository/entity tables, raw SQL files, Java SQL string literals.
+- Plain Java: keyword usage, call chain, path-based layers, raw SQL files, Java
+  SQL string literals.
+- Non-Java languages: not supported for full call-chain tracing yet.

@@ -1,0 +1,15 @@
+profile: java-generic
+detect:
+  files: [pom.xml, build.gradle, settings.gradle]
+layers:
+  - {name: Controller, path_hint: "(controller|api|web|handler)"}
+  - {name: Service, path_hint: "(service|logic|biz|manager)"}
+  - {name: Repository, path_hint: "(repository|dao|mapper|store|persistence)"}
+table_sources:
+  java_sql_literals: true
+  raw_sql: ["**/*.sql"]
+call_patterns:
+  method_invocation: '\b([A-Za-z_][\w]*)\s*\('
+  chain_step: '\.\s*([A-Za-z_]\w*)\s*\('
+exclude:
+  dirs: [target, node_modules, .git, dist, build, .idea, out]

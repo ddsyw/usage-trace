@@ -200,6 +200,33 @@ def _parse_raw_sql(root: Path, globs: list[str], unit_by_id: dict[str, dict]) ->
     return out
 
 
+def _java_string_literals(text: str) -> list[str]:
+    strings: list[str] = []
+    for m in re.finditer(r'"((?:\\.|[^"\\])*)"', text, re.DOTALL):
+        strings.append(bytes(m.group(1), "utf-8").decode("unicode_escape"))
+    return strings
+
+
+def _parse_java_sql_literals(unit_by_id: dict[str, dict]) -> list[dict]:
+    out: list[dict] = []
+    for uid, unit in unit_by_id.items():
+        file = unit.get("file")
+        if not file:
+            continue
+        try:
+            lines = Path(file).read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        start = max(int(unit.get("line") or 1) - 1, 0)
+        end = int(unit.get("end_line") or len(lines))
+        body = "\n".join(lines[start:end])
+        for sql in _java_string_literals(body):
+            tables = _tables_in_sql(sql)
+            if tables:
+                out.append({"qual": uid, "op": _op_from_sql(sql), "tables": tables, "sql": sql})
+    return out
+
+
 def resolve_tables(graph: dict, root: Path, profile: dict) -> dict:
     ts = profile.get("table_sources", {})
     statements: list[dict] = []
@@ -213,6 +240,8 @@ def resolve_tables(graph: dict, root: Path, profile: dict) -> dict:
         statements += _parse_jpa(root)
     if "raw_sql" in ts:
         statements += _parse_raw_sql(root, ts.get("raw_sql") or [], unit_by_id)
+    if "java_sql_literals" in ts:
+        statements += _parse_java_sql_literals(unit_by_id)
 
     table_by_name = {n.get("table"): n for n in graph["nodes"] if n["kind"] == "table"}
 

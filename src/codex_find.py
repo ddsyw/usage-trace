@@ -26,16 +26,33 @@ def _layer_order(profile: dict) -> list[str]:
     return order + [name for name in ("Table", "Unknown") if name not in order]
 
 
-def run(keyword: str, root: Path | str, profile_name: str = "java-spring",
+def detect_profile_name(root: Path | str) -> str:
+    root = Path(root)
+    java_markers = ("pom.xml", "build.gradle", "settings.gradle")
+    if any((root / marker).exists() for marker in java_markers) or any(root.rglob("*.java")):
+        for java in root.rglob("*.java"):
+            try:
+                text = java.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if "org.springframework" in text or "@RestController" in text or "@Service" in text:
+                return "java-spring"
+        return "java-generic"
+    return "java-generic"
+
+
+def run(keyword: str, root: Path | str, profile_name: str = "auto",
         depth: int = 4, max_nodes: int = 300, out: Path | str | None = None,
         variants: list[str] | None = None) -> dict:
     root = Path(root)
+    profile_name = detect_profile_name(root) if profile_name == "auto" else profile_name
     profile = load_profile(profile_name, _profile_dir())
     usages = discover(keyword, root, profile, variants)
     if usages:
         graph = trace(usages, root, profile, depth)
     else:
         graph = new_graph({"depth": min(depth, HARD_DEPTH_CAP)})
+    graph["meta"]["profile"] = profile_name
     graph = resolve_tables(graph, root, profile)
     graph = prune_and_layout(graph, max_nodes, _layer_order(profile))
 
@@ -54,7 +71,7 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Trace a keyword and render an offline HTML report.")
     ap.add_argument("--keyword", required=True)
     ap.add_argument("--root", required=True)
-    ap.add_argument("--profile", default="java-spring")
+    ap.add_argument("--profile", default="auto")
     ap.add_argument("--depth", type=int, default=4)
     ap.add_argument("--max-nodes", type=int, default=300)
     ap.add_argument("--variants", default="", help="comma-separated extra variants")
