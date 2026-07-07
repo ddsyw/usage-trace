@@ -23,5 +23,7 @@ def test_fixture_store_no_chain_present(fixture_root):
 
 def test_pyproject_declares_console_script(profiles_dir):
     text = (profiles_dir.parent / "pyproject.toml").read_text(encoding="utf-8")
-    assert 'name = "codex-find"' in text
-    assert 'codex-find = "codex_find:main"' in text
+    assert 'name = "usage-trace"' in text
+    assert 'usage-trace = "usage_trace:main"' in text
+    assert 'codex-find = "usage_trace:main"' in text
+    assert '"usage_trace"' in text

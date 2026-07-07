@@ -312,7 +312,7 @@ def trace(usages: list[dict], root: Path, profile: dict, depth: int = 4) -> dict
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="codex-find Phase 2: build call graph.")
+    ap = argparse.ArgumentParser(description="usage-trace Phase 2: build call graph.")
     ap.add_argument("--usages", required=True, help="path to usages JSON (from discover)")
     ap.add_argument("--root", required=True)
     ap.add_argument("--profile", required=True)

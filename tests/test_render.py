@@ -31,6 +31,7 @@ def test_render_single_file_html():
     html = render(_fixture_graph(), "storeNo",
                   {"project": "demo", "language": "java-spring"}, TMPL)
     assert html.startswith("<!DOCTYPE html>")
+    assert "<title>usage-trace" in html
     assert "storeNo" in html and "t_order" in html
     assert "http://" not in html and "https://" not in html  # offline single file
     assert "<svg" in html

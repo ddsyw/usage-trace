@@ -1,6 +1,7 @@
 import sys
 
-from codex_find import main, run
+from codex_find import run as compat_run
+from usage_trace import main, run
 
 
 def _write_generic_java_project(root):
@@ -77,6 +78,15 @@ def test_run_writes_full_report(fixture_root, tmp_path):
     assert graph["meta"]["counts"]["tables"] == 1
 
 
+def test_legacy_codex_find_import_still_runs(fixture_root, tmp_path):
+    out = tmp_path / "legacy-report.html"
+
+    graph = compat_run("storeNo", fixture_root, out=out)
+
+    assert out.exists()
+    assert graph["meta"]["counts"]["tables"] == 1
+
+
 def test_run_supports_generic_java_project_with_auto_profile(tmp_path):
     _write_generic_java_project(tmp_path)
     out = tmp_path / "generic-report.html"
@@ -95,7 +105,7 @@ def test_run_supports_generic_java_project_with_auto_profile(tmp_path):
 def test_main_writes_report_from_args(fixture_root, tmp_path, monkeypatch):
     out = tmp_path / "report.html"
     monkeypatch.setattr(sys, "argv", [
-        "codex_find.py",
+        "usage_trace.py",
         "--keyword", "storeNo",
         "--root", str(fixture_root),
         "--out", str(out),

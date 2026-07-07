@@ -150,7 +150,7 @@ def render(graph: dict, keyword: str, meta: dict, template_path: Path) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="codex-find Phase 5: render report.")
+    ap = argparse.ArgumentParser(description="usage-trace Phase 5: render report.")
     ap.add_argument("--graph", required=True)
     ap.add_argument("--keyword", required=True)
     ap.add_argument("--meta", required=True, help="path to meta JSON")

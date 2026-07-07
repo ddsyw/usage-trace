@@ -72,7 +72,7 @@ def prune_and_layout(graph: dict, max_nodes: int = 300,
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="codex-find Phase 4: prune + layout.")
+    ap = argparse.ArgumentParser(description="usage-trace Phase 4: prune + layout.")
     ap.add_argument("--graph", required=True)
     ap.add_argument("--max-nodes", type=int, default=300)
     args = ap.parse_args()

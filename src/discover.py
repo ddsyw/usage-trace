@@ -110,7 +110,7 @@ def discover(keyword: str, root: Path, profile: dict,
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="codex-find Phase 1: discover usage sites.")
+    ap = argparse.ArgumentParser(description="usage-trace Phase 1: discover usage sites.")
     ap.add_argument("--keyword", required=True)
     ap.add_argument("--variants", default="",
                     help="comma-separated extra variants (optional; auto-expanded if empty)")

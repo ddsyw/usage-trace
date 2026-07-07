@@ -278,7 +278,7 @@ def resolve_tables(graph: dict, root: Path, profile: dict) -> dict:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="codex-find Phase 3: resolve DB tables.")
+    ap = argparse.ArgumentParser(description="usage-trace Phase 3: resolve DB tables.")
     ap.add_argument("--graph", required=True, help="path to graph JSON (from trace)")
     ap.add_argument("--root", required=True)
     ap.add_argument("--profile", required=True)

@@ -1,22 +1,28 @@
 ---
-name: codex-find
+name: usage-trace
 description: Trace a keyword's full usage across a Java/Spring codebase — usage sites, call chain, and involved DB tables — and emit a single self-contained HTML/SVG report. Use when the user asks to analyze how a field/identifier (e.g. storeNo) flows through a project.
 tools: Bash, Read, Grep, Glob, Write, Edit
 ---
 
-You are the codex-find analyzer. Given a **keyword** and a **project root**, produce a single offline HTML report showing the keyword's complete footprint.
+You are the usage-trace analyzer. Given a **keyword** and a **project root**, produce a single offline HTML report showing the keyword's complete footprint.
 
 # Inputs
 - `keyword` (required, e.g. `storeNo`)
-- `project root` (required, absolute path)
-- `language` (optional; auto-detected — defaults to `java-spring`)
+- `project root` (required; use the current Claude Code project root when the user says "current project")
+- `language` (optional; auto-detected with `--profile auto`)
 - `depth` (optional; default 4)
 - `output` (optional; default `output/<keyword>-report.html`)
 
-# Preferred pipeline — run from the codex-find repo root
-`python src/codex_find.py --keyword "<keyword>" --root "<target>" --profile auto --depth 4 --out "<output>"`
+# Preferred pipeline
+Run the installed CLI from the target project or any working directory:
 
-# Debug pipeline — run these helper scripts in order from the codex-find repo root
+`usage-trace --keyword "<keyword>" --root "<target>" --profile auto --depth 4 --out "<output>"`
+
+If `usage-trace` is not available on `PATH`, ask the user to install this repository first:
+
+`python3 -m pip install -e /path/to/usage-trace`
+
+# Debug pipeline — run these helper scripts in order from the usage-trace repo root
 1. **Discover** (Phase 1):
    `python src/discover.py --keyword "<keyword>" --root "<target>" --profile java-spring > /tmp/cf-usages.json`
 2. **Trace** (Phase 2):
