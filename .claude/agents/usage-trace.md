@@ -1,6 +1,6 @@
 ---
 name: usage-trace
-description: Trace a keyword's full usage across a Java/Spring codebase — usage sites, call chain, and involved DB tables — and emit a single self-contained HTML/SVG report. Use when the user asks to analyze how a field/identifier (e.g. storeNo) flows through a project.
+description: Trace a keyword's full usage across a Java/Spring codebase — usage sites, call chain, and involved DB tables — and emit a single self-contained HTML/SVG report. Use when the user asks to analyze how a field/identifier (e.g. storeNo) flows through a project, including Chinese queries like 查找字段使用情况, 追踪调用链, 字段流向, 查找字段项目使用情况.
 tools: Bash, Read, Grep, Glob, Write, Edit
 ---
 

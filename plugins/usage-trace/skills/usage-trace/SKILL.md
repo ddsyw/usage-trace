@@ -1,6 +1,6 @@
 ---
 name: usage-trace
-description: Trace Java/Spring or plain Java keyword usage, call chains, and DB tables with the local usage-trace CLI and produce an offline HTML report.
+description: Trace Java/Spring or plain Java keyword usage, call chains, and DB tables with the local usage-trace CLI and produce an offline HTML report. Use when the user asks to find a field's usage, trace a call chain, or identify involved DB tables. Supports Chinese queries like 查找字段使用情况, 追踪调用链, 字段流向分析, 查找字段项目使用情况.
 ---
 
 # usage-trace
