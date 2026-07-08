@@ -2,15 +2,29 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from common import load_profile, new_graph
-from discover import discover
-from graph import prune_and_layout
-from render import render
-from tables import resolve_tables
-from trace import HARD_DEPTH_CAP, trace
+def _prefer_local_modules() -> None:
+    module_dir = str(Path(__file__).resolve().parent)
+    if sys.path[0:1] == [module_dir]:
+        return
+    try:
+        sys.path.remove(module_dir)
+    except ValueError:
+        pass
+    sys.path.insert(0, module_dir)
+
+
+_prefer_local_modules()
+
+from common import load_profile, new_graph  # noqa: E402
+from discover import discover  # noqa: E402
+from graph import prune_and_layout  # noqa: E402
+from render import render  # noqa: E402
+from tables import resolve_tables  # noqa: E402
+from trace import HARD_DEPTH_CAP, trace  # noqa: E402
 
 
 def _profile_dir() -> Path:
@@ -56,7 +70,7 @@ def run(keyword: str, root: Path | str, profile_name: str = "auto",
     graph = resolve_tables(graph, root, profile)
     graph = prune_and_layout(graph, max_nodes, _layer_order(profile))
 
-    output = Path(out) if out is not None else Path("output") / f"{keyword}-report.html"
+    output = Path(out) if out is not None else Path(".usage-trace") / f"{keyword}-report.html"
     output.parent.mkdir(parents=True, exist_ok=True)
     meta = {
         "project": root.name,

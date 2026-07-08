@@ -2,48 +2,573 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>usage-trace · {{KEYWORD}}</title>
 <style>
-  body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;color:#0f172a}
-  header{background:#1e293b;color:#fff;padding:12px 18px;font-size:14px}
-  header b{font-size:16px}
-  section{padding:14px 18px;border-top:1px solid #e2e8f0}
-  .label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
-  table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}
-  th,td{border:1px solid #e2e8f0;padding:5px 8px;text-align:left;vertical-align:top}
-  th{background:#f1f5f9}
-  code{background:#f1f5f9;padding:1px 4px;border-radius:3px}
-  .notes{font-size:12px;color:#475569}
-  .node-Controller{fill:#e8f0fe;stroke:#3b82f6}
-  .node-Service{fill:#fef3c7;stroke:#d97706}
-  .node-Repository{fill:#dcfce7;stroke:#16a34a}
-  .node-Table{fill:#f3e8ff;stroke:#9333ea}
-  text{font:11px sans-serif}
+  :root{
+    --bg:#f7f8fa;
+    --panel:#ffffff;
+    --panel-2:#f0f4f7;
+    --ink:#18212f;
+    --muted:#637181;
+    --line:#d8e0e7;
+    --accent:#0f766e;
+    --accent-2:#2563eb;
+    --warn:#b45309;
+    --code:#eef3f6;
+    --shadow:0 12px 28px rgba(20,31,43,.10);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    letter-spacing:0;
+  }
+  button,input{font:inherit}
+  .shell{height:100vh;display:grid;grid-template-rows:auto 1fr;overflow:hidden}
+  header{
+    display:flex;align-items:center;justify-content:space-between;gap:18px;
+    padding:12px 18px;background:var(--panel);border-bottom:1px solid var(--line);
+  }
+  .title{min-width:0}
+  .title h1{margin:0;font-size:18px;line-height:1.2;font-weight:700}
+  .title p{margin:4px 0 0;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stats{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .stat{min-width:72px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel-2)}
+  .stat strong{display:block;font-size:17px;line-height:1;color:var(--accent)}
+  .stat span{display:block;margin-top:4px;font-size:10px;color:var(--muted);text-transform:uppercase}
+  main{display:grid;grid-template-columns:270px minmax(0,1fr) 360px;min-height:0}
+  aside,.details{min-height:0;overflow:auto;background:var(--panel);border-right:1px solid var(--line)}
+  .details{border-right:0;border-left:1px solid var(--line)}
+  .panel-section{padding:14px 14px;border-bottom:1px solid var(--line)}
+  .label{font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:9px}
+  .search-wrap{display:flex;gap:8px}
+  #graph-search{
+    width:100%;height:36px;border:1px solid var(--line);border-radius:7px;background:#fff;
+    padding:0 10px;color:var(--ink);outline:none;
+  }
+  #graph-search:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(15,118,110,.12)}
+  .layer-tabs{display:flex;flex-direction:column;gap:7px}
+  .layer-chip,.layer-tab,.node-jump,.result-item{
+    width:100%;border:1px solid var(--line);background:#fff;border-radius:7px;padding:8px 9px;
+    display:flex;align-items:center;gap:8px;text-align:left;color:var(--ink);cursor:pointer;
+  }
+  .layer-chip:hover,.layer-tab:hover,.node-jump:hover,.result-item:hover{border-color:currentColor;background:#f3fbf9}
+  .layer-chip span,.layer-tab:before{width:9px;height:9px;border-radius:50%;background:currentColor;flex:0 0 auto}
+  .layer-tab:before{content:""}
+  .layer-chip b,.layer-tab b,.node-jump em{margin-left:auto;color:var(--muted);font-style:normal;font-size:12px}
+  .layer-tab.active{border-color:var(--accent);background:#e7f6f3;color:var(--accent);font-weight:700}
+  .layer-tab.active b{color:var(--accent)}
+  .node-jump span{width:22px;height:22px;border-radius:50%;background:var(--panel-2);display:grid;place-items:center;color:var(--muted);font-size:11px}
+  .node-jump strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #search-results{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+  .result-item strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .result-item span{font-size:11px;color:var(--muted);margin-left:auto}
+  .graph-stage{position:relative;min-width:0;min-height:0;overflow:hidden;background:#fbfcfd}
+  .toolbar{
+    position:absolute;z-index:5;left:14px;top:14px;display:flex;gap:6px;padding:5px;
+    background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow)
+  }
+  .toolbar button{
+    min-width:32px;height:30px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;color:var(--ink)
+  }
+  .toolbar button:hover{border-color:var(--accent);color:var(--accent)}
+  .toolbar .mode-button{width:auto;padding:0 10px}
+  .toolbar .mode-button.active{border-color:var(--accent);background:#e7f6f3;color:var(--accent);font-weight:700}
+  .graph-scroll{width:100%;height:100%;overflow:hidden;cursor:grab}
+  .graph-scroll.dragging{cursor:grabbing}
+  .trace-graph{width:100%;height:100%;display:block;background:#fbfcfd}
+  .graph-edge{stroke:#8b99a6;stroke-width:1.7;opacity:.74}
+  .graph-edge.main-path{stroke:var(--accent);stroke-width:2.4;opacity:1}
+  .graph-edge.related{stroke:var(--accent);stroke-width:2.5;opacity:1}
+  .graph-edge.dimmed{opacity:.12}
+  .graph-node{cursor:pointer;outline:none}
+  .graph-node rect{stroke-width:1.6;filter:drop-shadow(0 4px 8px rgba(26,35,45,.08))}
+  .graph-node text{font-size:11px;fill:#142033;pointer-events:none}
+  .graph-node:hover rect,.graph-node.selected rect,.graph-node.search-hit rect{stroke-width:2.4}
+  .graph-node.selected rect{filter:drop-shadow(0 8px 14px rgba(15,118,110,.25))}
+  .graph-node.main-path rect{stroke-width:2.1}
+  .graph-node.dimmed{opacity:.22}
+  .node-controller{color:#2563eb}.node-controller rect,.node-controller circle{fill:#e8f0fe;stroke:#2563eb}
+  .node-service{color:#b45309}.node-service rect,.node-service circle{fill:#fff4d6;stroke:#b45309}
+  .node-repository{color:#15803d}.node-repository rect,.node-repository circle{fill:#dcfce7;stroke:#15803d}
+  .node-entity{color:#7c3aed}.node-entity rect,.node-entity circle{fill:#f1e8ff;stroke:#7c3aed}
+  .node-sql{color:#be123c}.node-sql rect,.node-sql circle{fill:#ffe4e6;stroke:#be123c}
+  .node-table{color:#0f766e}.node-table rect,.node-table circle{fill:#d9f7ef;stroke:#0f766e}
+  .node-unknown{color:#64748b}.node-unknown rect,.node-unknown circle{fill:#eef2f6;stroke:#64748b}
+  .graph-group{pointer-events:none}
+  .graph-group .group-frame{fill:rgba(255,255,255,.46);stroke:currentColor;stroke-width:1.2;stroke-dasharray:7 5;opacity:.42}
+  .graph-group .group-label{font-size:12px;font-weight:700;fill:currentColor}
+  .graph-group.dimmed{opacity:.18}
+  .details h2{font-size:16px;margin:0 0 4px;line-height:1.25}
+  .badge-row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 12px}
+  .badge{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:3px 8px;font-size:11px;color:var(--muted);background:#fff}
+  .field{margin:10px 0}
+  .field b{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:5px}
+  .field code,code{background:var(--code);border-radius:4px;padding:2px 4px}
+  .field pre{margin:0;white-space:pre-wrap;word-break:break-word;background:var(--code);border-radius:7px;padding:9px;font-size:12px;line-height:1.45;max-height:180px;overflow:auto}
+  .link-list{display:flex;flex-direction:column;gap:6px}
+  .link-list button{border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px 8px;text-align:left;cursor:pointer;font-size:12px}
+  .link-list button:hover{border-color:var(--accent);background:#f3fbf9}
+  .table-detail-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px}
+  .table-detail-grid .field{margin:0}
+  .path-list{display:flex;flex-direction:column;gap:8px}
+  .path-lane{
+    width:100%;border:1px solid var(--line);border-radius:7px;background:#fff;padding:8px;
+    display:grid;grid-template-columns:24px 1fr;gap:8px;text-align:left;cursor:pointer
+  }
+  .path-lane:hover{border-color:var(--accent);background:#f3fbf9}
+  .path-rank{width:24px;height:24px;border-radius:50%;background:#e7f6f3;color:var(--accent);display:grid;place-items:center;font-size:12px;font-weight:700}
+  .path-chain{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .path-step{display:block;min-width:0;position:relative;padding-left:12px}
+  .path-step:before{content:"";position:absolute;left:3px;top:14px;bottom:-8px;width:1px;background:var(--line)}
+  .path-step:last-child:before{display:none}
+  .path-step em{display:block;color:var(--muted);font-style:normal;font-size:10px;text-transform:uppercase}
+  .path-step strong{display:block;font-size:12px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tour-list{display:flex;flex-direction:column;gap:7px}
+  .tour-step{
+    width:100%;border:1px solid var(--line);border-radius:7px;background:#fff;padding:8px;
+    display:grid;grid-template-columns:24px 1fr;gap:8px;text-align:left;cursor:pointer
+  }
+  .tour-step:hover{border-color:var(--accent);background:#f3fbf9}
+  .tour-step span{width:24px;height:24px;border-radius:50%;background:var(--panel-2);display:grid;place-items:center;color:var(--muted);font-size:11px}
+  .tour-step strong{display:block;font-size:12px;line-height:1.25}
+  .tour-step em{display:block;margin-top:3px;color:var(--muted);font-size:11px;font-style:normal;line-height:1.35}
+  .layer-edge{border:1px solid var(--line);border-radius:7px;background:#fff;padding:8px;margin-top:7px}
+  .layer-edge strong{display:block;font-size:12px;line-height:1.3}
+  .layer-edge span{display:block;margin-top:4px;color:var(--muted);font-size:11px}
+  details{margin-top:8px}
+  summary{cursor:pointer;color:var(--accent);font-size:12px;font-weight:700}
+  table{border-collapse:collapse;width:100%;font-size:12px;margin-top:7px;table-layout:fixed}
+  th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top;word-break:break-word}
+  th{background:var(--panel-2)}
+  td code{white-space:pre-wrap;word-break:break-word}
+  .muted{color:var(--muted);font-size:12px}
+  .notes{font-size:12px;color:var(--muted);line-height:1.5}
+  #graph-data{display:none}
+  @media (max-width:980px){
+    .shell{height:auto;min-height:100vh;overflow:visible}
+    header{align-items:flex-start;flex-direction:column}
+    .stats{justify-content:flex-start}
+    main{display:block}
+    aside,.details{border:0;border-bottom:1px solid var(--line)}
+    .graph-stage{height:62vh;min-height:420px}
+  }
 </style>
 </head>
 <body>
-<header>
-  <b>{{KEYWORD}}</b> · {{PROJECT}} · {{LANGUAGE}} · {{GENERATED_AT}} ·
-  usages {{USAGES}} / tables {{TABLES}} / depth {{DEPTH}}
-</header>
-<section>
-  <div class="label">调用链 (主图 · 分层左→右)</div>
-  {{SVG}}
-</section>
-<section>
-  <details>
-    <summary>显示网络全景 (径向)</summary>
-    {{PANORAMA_SVG}}
-  </details>
-</section>
-<section>
-  <div class="label">涉及表</div>
-  {{TABLES_HTML}}
-</section>
-<section>
-  <div class="label">使用位置</div>
-  {{USAGES_HTML}}
-</section>
-<section class="notes">{{NOTES}}</section>
+<div class="shell">
+  <header>
+    <div class="title">
+      <h1>{{KEYWORD}}</h1>
+      <p>{{PROJECT}} · {{LANGUAGE}} · {{GENERATED_AT}}</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><strong>{{USAGES}}</strong><span>usages</span></div>
+      <div class="stat"><strong>{{TABLES}}</strong><span>tables</span></div>
+      <div class="stat"><strong>{{DEPTH}}</strong><span>depth</span></div>
+    </div>
+  </header>
+  <main>
+    <aside>
+      <section class="panel-section">
+        <div class="label">主路径</div>
+        <div class="path-list">{{MAIN_PATHS_HTML}}</div>
+      </section>
+      <section class="panel-section">
+        <div class="label">导览</div>
+        <div class="tour-list">{{TOUR_HTML}}</div>
+      </section>
+      <section class="panel-section">
+        <div class="label">搜索节点</div>
+        <div class="search-wrap">
+          <input id="graph-search" type="search" placeholder="输入方法、类、表名或层级">
+        </div>
+        <div id="search-results"></div>
+      </section>
+      <section class="panel-section layer-tabs-section">
+        <div class="label">层级</div>
+        <div class="layer-tabs" aria-label="Layer filters">{{LAYER_TABS_HTML}}</div>
+      </section>
+      <section class="panel-section">
+        <div class="label">连接最多</div>
+        <div class="link-list">{{TOP_NODES_HTML}}</div>
+      </section>
+      <section class="panel-section">
+        <div class="label">层间关系</div>
+        {{LAYER_EDGES_HTML}}
+      </section>
+      <section class="panel-section notes">{{NOTES}}</section>
+    </aside>
+    <section class="graph-stage">
+      <div class="toolbar" aria-label="Graph controls">
+        <button type="button" id="view-main" class="mode-button" title="只突出主路径">主路径</button>
+        <button type="button" id="view-all" class="mode-button" title="显示全量关系">全量</button>
+        <button type="button" id="zoom-in" title="放大">+</button>
+        <button type="button" id="zoom-out" title="缩小">-</button>
+        <button type="button" id="fit-graph" title="适应窗口">fit</button>
+      </div>
+      <div id="graph-scroll" class="graph-scroll">
+        {{SVG}}
+      </div>
+    </section>
+    <aside class="details">
+      <section id="node-details" class="panel-section"></section>
+      <section class="panel-section">
+        <details>
+          <summary>网络全景</summary>
+          {{PANORAMA_SVG}}
+        </details>
+      </section>
+      <section class="panel-section">
+        <div class="label">涉及表</div>
+        {{TABLES_HTML}}
+      </section>
+      <section class="panel-section">
+        <div class="label">XML / SQL 来源</div>
+        {{DB_SOURCES_HTML}}
+      </section>
+      <section class="panel-section">
+        <div class="label">使用位置</div>
+        {{USAGES_HTML}}
+      </section>
+    </aside>
+  </main>
+</div>
+<script id="graph-data" type="application/json">{{GRAPH_DATA}}</script>
+<script>
+(function(){
+  const graph = JSON.parse(document.getElementById("graph-data").textContent);
+  const nodes = graph.nodes || [];
+  const edges = graph.edges || [];
+  const mainPaths = graph.main_paths || [];
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const mainNodeIds = new Set(mainPaths.flatMap((path) => path.nodes || []));
+  const mainEdgeKeys = new Set();
+  for (const path of mainPaths) {
+    const ids = path.nodes || [];
+    for (let i = 0; i < ids.length - 1; i += 1) mainEdgeKeys.add(edgeKey(ids[i], ids[i + 1]));
+  }
+  const svg = document.getElementById("trace-graph");
+  const scroll = document.getElementById("graph-scroll");
+  const details = document.getElementById("node-details");
+  const search = document.getElementById("graph-search");
+  const results = document.getElementById("search-results");
+  const base = {
+    x: 0,
+    y: 0,
+    w: Number(svg.dataset.width || 800),
+    h: Number(svg.dataset.height || 600)
+  };
+  let view = { ...base };
+  let selectedId = nodes.length ? nodes[0].id : null;
+  let graphMode = mainNodeIds.size ? "main" : "all";
+  let activeLayer = "all";
+  let dragging = false;
+  let dragStart = null;
+
+  function esc(value){
+    return String(value == null ? "" : value)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+  }
+  function setViewBox(){
+    svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
+  }
+  function edgeKey(from, to){
+    return `${from}\u001f${to}`;
+  }
+  function setActiveModeButton(){
+    document.getElementById("view-main").classList.toggle("active", graphMode === "main");
+    document.getElementById("view-all").classList.toggle("active", graphMode === "all");
+  }
+  function setActiveLayerTabs(){
+    document.querySelectorAll(".layer-tab").forEach((button) => {
+      const isActive = (button.dataset.layer || "all") === activeLayer;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-pressed", String(isActive));
+    });
+  }
+  function nodeLayer(id){
+    const node = nodeMap.get(id);
+    return node && node.layer ? node.layer : "Unknown";
+  }
+  function edgeTouchesLayer(edge, layer){
+    return nodeLayer(edge.from) === layer || nodeLayer(edge.to) === layer;
+  }
+  function applyLayerTabs(){
+    setActiveLayerTabs();
+  }
+  function applyMainPathView(){
+    const useMain = graphMode === "main" && mainNodeIds.size > 0;
+    const useLayer = graphMode === "all" && activeLayer !== "all";
+    document.querySelectorAll(".graph-node").forEach((el) => {
+      const node = nodeMap.get(el.dataset.nodeId);
+      const layerMismatch = useLayer && (!node || node.layer !== activeLayer);
+      const mainMismatch = useMain && !mainNodeIds.has(el.dataset.nodeId);
+      el.classList.toggle("dimmed", layerMismatch || mainMismatch);
+    });
+    document.querySelectorAll(".graph-group").forEach((el) => {
+      const layerMismatch = useLayer && el.dataset.layer !== activeLayer;
+      el.classList.toggle("dimmed", layerMismatch);
+    });
+    document.querySelectorAll(".graph-edge").forEach((el) => {
+      const edge = { from: el.dataset.from, to: el.dataset.to };
+      const layerMismatch = useLayer && !edgeTouchesLayer(edge, activeLayer);
+      const mainMismatch = useMain && !mainEdgeKeys.has(edgeKey(edge.from, edge.to));
+      el.classList.toggle("dimmed", layerMismatch || mainMismatch);
+      el.classList.remove("related");
+    });
+    setActiveModeButton();
+    applyLayerTabs();
+  }
+  function applyFocus(id){
+    graphMode = "all";
+    activeLayer = "all";
+    const related = relatedEdges(id);
+    const visibleNodes = new Set([id]);
+    const visibleEdges = new Set();
+    for (const edge of related) {
+      visibleNodes.add(edge.from);
+      visibleNodes.add(edge.to);
+      visibleEdges.add(edgeKey(edge.from, edge.to));
+    }
+    document.querySelectorAll(".graph-node").forEach((el) => {
+      el.classList.toggle("dimmed", !visibleNodes.has(el.dataset.nodeId));
+    });
+    document.querySelectorAll(".graph-edge").forEach((el) => {
+      const isRelated = visibleEdges.has(edgeKey(el.dataset.from, el.dataset.to));
+      el.classList.toggle("related", isRelated);
+      el.classList.toggle("dimmed", !isRelated);
+    });
+    document.querySelectorAll(".graph-group").forEach((el) => {
+      el.classList.remove("dimmed");
+    });
+    setActiveModeButton();
+    applyLayerTabs();
+  }
+  function selectLayerTab(layer){
+    activeLayer = layer || "all";
+    graphMode = "all";
+    document.querySelectorAll(".graph-node").forEach((el) => {
+      el.classList.remove("selected");
+    });
+    document.querySelectorAll(".graph-edge").forEach((el) => {
+      el.classList.remove("related");
+    });
+    applyMainPathView();
+  }
+  function zoom(factor){
+    const cx = view.x + view.w / 2;
+    const cy = view.y + view.h / 2;
+    const nextW = Math.max(220, Math.min(base.w * 1.8, view.w * factor));
+    const nextH = Math.max(160, Math.min(base.h * 1.8, view.h * factor));
+    view = { x: cx - nextW / 2, y: cy - nextH / 2, w: nextW, h: nextH };
+    setViewBox();
+  }
+  function fitGraph(){
+    view = { ...base };
+    setViewBox();
+  }
+  function focusNode(id){
+    const node = nodeMap.get(id);
+    if (!node) return;
+    const targetW = Math.max(420, base.w * 0.42);
+    const targetH = Math.max(280, base.h * 0.42);
+    view = {
+      x: node.x + node.width / 2 - targetW / 2,
+      y: node.y + node.height / 2 - targetH / 2,
+      w: targetW,
+      h: targetH
+    };
+    setViewBox();
+  }
+  function relatedEdges(id){
+    return edges.filter((edge) => edge.from === id || edge.to === id);
+  }
+  function connectedNodes(id){
+    const found = [];
+    for (const edge of relatedEdges(id)) {
+      const other = edge.from === id ? edge.to : edge.from;
+      const node = nodeMap.get(other);
+      if (node) found.push({ node, edge });
+    }
+    return found;
+  }
+  function listItems(values){
+    const items = (Array.isArray(values) ? values : String(values || "").split(","))
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    return items.length ? items.map((value) => `<code>${esc(value)}</code>`).join("<br>") : '<span class="muted">无</span>';
+  }
+  function renderTableDetails(node){
+    if (node.kind !== "table") return "";
+    const ops = node.ops && node.ops.length ? node.ops : String(node.op || "").split(",");
+    const statements = node.statement_ids || [];
+    const sources = node.source_files || [];
+    const sql = node.sql_snippet ? `<pre>${esc(node.sql_snippet)}</pre>` : '<span class="muted">无 SQL 片段</span>';
+    return `
+      <div class="field"><b>表详情</b>
+        <div class="table-detail-grid">
+          <div class="field"><b>访问操作</b>${listItems(ops)}</div>
+          <div class="field"><b>Statement</b>${listItems(statements)}</div>
+          <div class="field"><b>来源文件</b>${listItems(sources)}</div>
+          <div class="field"><b>SQL 片段</b>${sql}</div>
+        </div>
+      </div>
+    `;
+  }
+  function renderDetails(id){
+    const node = nodeMap.get(id);
+    if (!node) {
+      details.innerHTML = '<p class="muted">选择一个节点查看详情。</p>';
+      return;
+    }
+    const badges = [
+      node.kind ? `<span class="badge">${esc(node.kind)}</span>` : "",
+      node.layer ? `<span class="badge">${esc(node.layer)}</span>` : "",
+      node.table ? `<span class="badge">table ${esc(node.table)}</span>` : "",
+      node.op ? `<span class="badge">${esc(node.op)}</span>` : ""
+    ].join("");
+    const usages = (node.usages || []).map((usage) =>
+      `<div class="field"><b>${esc(usage.file || "")}:${esc(usage.line || "")}</b><pre>${esc(usage.snippet || "")}</pre></div>`
+    ).join("");
+    const sql = node.sql_snippet ? `<div class="field"><b>SQL</b><pre>${esc(node.sql_snippet)}</pre></div>` : "";
+    const source = node.source_unit ? `<div class="field"><b>Source unit</b><code>${esc(node.source_unit)}</code></div>` : "";
+    const sourceFiles = (node.source_files || []).map((file) =>
+      `<code>${esc(file)}</code>`
+    ).join("<br>");
+    const sourceFileBlock = sourceFiles ? `<div class="field"><b>Source files</b>${sourceFiles}</div>` : "";
+    const tableDetails = renderTableDetails(node);
+    const links = connectedNodes(id).map(({ node: linked, edge }) =>
+      `<button type="button" data-node-id="${esc(linked.id)}">${esc(edge.from === id ? "to" : "from")} · ${esc(linked.label || linked.id)}</button>`
+    ).join("");
+    details.innerHTML = `
+      <h2>${esc(node.label || node.id)}</h2>
+      <div class="badge-row">${badges}</div>
+      ${source}
+      ${sourceFileBlock}
+      ${tableDetails}
+      ${sql}
+      <div class="field"><b>Connected nodes</b><div class="link-list">${links || '<span class="muted">无连接节点</span>'}</div></div>
+      <div class="field"><b>Usages</b>${usages || '<span class="muted">无使用位置</span>'}</div>
+    `;
+    details.querySelectorAll("[data-node-id]").forEach((button) => {
+      button.addEventListener("click", () => selectNode(button.dataset.nodeId, true));
+    });
+  }
+  function selectNode(id, focus){
+    selectedId = id;
+    document.querySelectorAll(".graph-node").forEach((el) => {
+      el.classList.toggle("selected", el.dataset.nodeId === id);
+    });
+    document.querySelectorAll(".graph-edge").forEach((el) => {
+      el.classList.toggle("related", el.dataset.from === id || el.dataset.to === id);
+    });
+    renderDetails(id);
+    applyFocus(id);
+    if (focus) focusNode(id);
+  }
+  function runSearch(){
+    const q = search.value.trim().toLowerCase();
+    const matches = q
+      ? nodes.filter((node) => [node.label, node.id, node.layer, node.kind, node.table]
+          .filter(Boolean).some((value) => String(value).toLowerCase().includes(q)))
+      : [];
+    const hitIds = new Set(matches.map((node) => node.id));
+    document.querySelectorAll(".graph-node").forEach((el) => {
+      el.classList.toggle("search-hit", hitIds.has(el.dataset.nodeId));
+    });
+    results.innerHTML = matches.slice(0, 8).map((node) =>
+      `<button type="button" class="result-item" data-node-id="${esc(node.id)}"><strong>${esc(node.label || node.id)}</strong><span>${esc(node.layer || "")}</span></button>`
+    ).join("");
+    results.querySelectorAll("[data-node-id]").forEach((button) => {
+      button.addEventListener("click", () => selectNode(button.dataset.nodeId, true));
+    });
+  }
+
+  document.querySelectorAll(".graph-node").forEach((el) => {
+    el.addEventListener("click", () => selectNode(el.dataset.nodeId, false));
+    el.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") selectNode(el.dataset.nodeId, true);
+    });
+  });
+  document.querySelectorAll(".node-jump").forEach((button) => {
+    button.addEventListener("click", () => selectNode(button.dataset.nodeId, true));
+  });
+  document.querySelectorAll(".path-lane").forEach((button) => {
+    button.addEventListener("click", () => selectNode(button.dataset.nodeId, true));
+  });
+  document.querySelectorAll(".tour-step").forEach((button) => {
+    button.addEventListener("click", () => selectNode(button.dataset.nodeId, true));
+  });
+  document.querySelectorAll(".layer-chip").forEach((button) => {
+    button.addEventListener("click", () => {
+      const layer = button.dataset.layer;
+      search.value = layer || "";
+      runSearch();
+      selectLayerTab(layer || "all");
+    });
+  });
+  document.querySelectorAll(".layer-tab").forEach((button) => {
+    button.addEventListener("click", () => selectLayerTab(button.dataset.layer || "all"));
+  });
+  search.addEventListener("input", runSearch);
+  document.getElementById("view-main").addEventListener("click", () => {
+    graphMode = "main";
+    activeLayer = "all";
+    applyMainPathView();
+  });
+  document.getElementById("view-all").addEventListener("click", () => {
+    graphMode = "all";
+    activeLayer = "all";
+    applyMainPathView();
+  });
+  document.getElementById("zoom-in").addEventListener("click", () => zoom(0.8));
+  document.getElementById("zoom-out").addEventListener("click", () => zoom(1.25));
+  document.getElementById("fit-graph").addEventListener("click", fitGraph);
+  window.fitGraph = fitGraph;
+
+  svg.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    zoom(event.deltaY < 0 ? 0.9 : 1.1);
+  }, { passive:false });
+  svg.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".graph-node")) return;
+    dragging = true;
+    scroll.classList.add("dragging");
+    dragStart = { x:event.clientX, y:event.clientY, view:{ ...view } };
+    svg.setPointerCapture(event.pointerId);
+  });
+  svg.addEventListener("pointermove", (event) => {
+    if (!dragging || !dragStart) return;
+    const scaleX = view.w / Math.max(svg.clientWidth, 1);
+    const scaleY = view.h / Math.max(svg.clientHeight, 1);
+    view.x = dragStart.view.x - (event.clientX - dragStart.x) * scaleX;
+    view.y = dragStart.view.y - (event.clientY - dragStart.y) * scaleY;
+    setViewBox();
+  });
+  svg.addEventListener("pointerup", () => {
+    dragging = false;
+    scroll.classList.remove("dragging");
+  });
+  svg.addEventListener("pointercancel", () => {
+    dragging = false;
+    scroll.classList.remove("dragging");
+  });
+
+  setViewBox();
+  applyMainPathView();
+  if (selectedId) {
+    document.querySelectorAll(".graph-node").forEach((el) => {
+      el.classList.toggle("selected", el.dataset.nodeId === selectedId);
+    });
+    renderDetails(selectedId);
+  }
+})();
+</script>
 </body>
 </html>

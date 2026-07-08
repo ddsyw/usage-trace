@@ -1,4 +1,5 @@
 import sys
+import subprocess
 
 from codex_find import run as compat_run
 from usage_trace import main, run
@@ -74,8 +75,42 @@ def test_run_writes_full_report(fixture_root, tmp_path):
     assert "OrderController.queryByStoreNo" in html
     assert "OrderService.findByStoreNo" in html
     assert "OrderMapper.selectByStoreNo" in html
+    assert "OrderMapper.xml" in html
+    assert "XML / SQL 来源" in html
     assert "t_order" in html
     assert graph["meta"]["counts"]["tables"] == 1
+
+
+def test_usage_trace_import_prefers_local_trace_module(tmp_path):
+    src_dir = str(__import__("pathlib").Path(__file__).resolve().parent.parent / "src")
+    code = (
+        "import sys; "
+        f"sys.path.append({src_dir!r}); "
+        "import usage_trace; "
+        "print(usage_trace.HARD_DEPTH_CAP)"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "8"
+
+
+def test_run_defaults_to_usage_trace_directory(fixture_root, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    run("storeNo", fixture_root)
+
+    out = tmp_path / ".usage-trace" / "storeNo-report.html"
+    assert out.exists()
+    assert not (tmp_path / "output" / "storeNo-report.html").exists()
+    assert "t_order" in out.read_text(encoding="utf-8")
 
 
 def test_legacy_codex_find_import_still_runs(fixture_root, tmp_path):

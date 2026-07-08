@@ -7,8 +7,25 @@ from pathlib import Path
 from collections import defaultdict, deque
 
 from common import dump_graph, load_graph
+from understand_rules import apply_understand_rules
 
 DEFAULT_LAYER_ORDER = ["Controller", "Service", "Repository", "Table", "Unknown"]
+
+
+def _critical_node_ids(graph: dict) -> list[str]:
+    ids = {n["id"] for n in graph["nodes"] if n.get("kind") == "table"}
+    for edge in graph["edges"]:
+        if edge.get("kind") == "references":
+            ids.add(edge["from"])
+            ids.add(edge["to"])
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for node in graph["nodes"]:
+        nid = node["id"]
+        if nid in ids and nid not in seen:
+            seen.add(nid)
+            ordered.append(nid)
+    return ordered
 
 
 def _truncate(graph: dict, max_nodes: int) -> None:
@@ -16,6 +33,10 @@ def _truncate(graph: dict, max_nodes: int) -> None:
     if len(graph["nodes"]) <= max_nodes:
         return
     keep_ids: set[str] = set()
+    for nid in _critical_node_ids(graph):
+        if len(keep_ids) >= max_nodes:
+            break
+        keep_ids.add(nid)
     seeds = [n["id"] for n in graph["nodes"]
              if n.get("kind") == "unit" and n.get("usages")]
     if not seeds:
@@ -24,13 +45,16 @@ def _truncate(graph: dict, max_nodes: int) -> None:
     for e in graph["edges"]:
         adj[e["from"]].append(e["to"])
     q = deque(seeds)
+    expanded: set[str] = set()
     while q and len(keep_ids) < max_nodes:
         nid = q.popleft()
-        if nid in keep_ids:
+        if nid in expanded:
             continue
-        keep_ids.add(nid)
+        expanded.add(nid)
+        if nid not in keep_ids:
+            keep_ids.add(nid)
         for nb in adj.get(nid, []):
-            if nb not in keep_ids:
+            if nb not in expanded:
                 q.append(nb)
     if len(keep_ids) < max_nodes:
         for n in graph["nodes"]:
@@ -61,6 +85,7 @@ def prune_and_layout(graph: dict, max_nodes: int = 300,
     layer_order = layer_order or DEFAULT_LAYER_ORDER
     _truncate(graph, max_nodes)
     _layout(graph, layer_order)
+    apply_understand_rules(graph, layer_order)
     graph["meta"]["counts"] = {
         "nodes": len(graph["nodes"]),
         "edges": len(graph["edges"]),

@@ -100,6 +100,45 @@ def test_trace_avoids_same_name_false_edges_and_duplicates(fixture_root, profile
     )
 
 
+def test_trace_resolves_mapper_methods_with_param_annotations(tmp_path, profiles_dir):
+    java_dir = tmp_path / "src/main/java/com/example"
+    (java_dir / "service").mkdir(parents=True)
+    (java_dir / "mapper").mkdir(parents=True)
+    (java_dir / "service/StoreService.java").write_text(
+        """package com.example.service;
+import com.example.mapper.StoreMapper;
+public class StoreService {
+  private final StoreMapper storeMapper;
+  public Object getStoreInfoByStoreNo(String storeNo) {
+    return this.storeMapper.selectByStoreNo(storeNo);
+  }
+}
+""",
+        encoding="utf-8",
+    )
+    (java_dir / "mapper/StoreMapper.java").write_text(
+        """package com.example.mapper;
+import org.apache.ibatis.annotations.Param;
+public interface StoreMapper {
+  Object selectByStoreNo(@Param("storeNo") String storeNo);
+}
+""",
+        encoding="utf-8",
+    )
+    profile = load_profile("java-spring", profiles_dir)
+    usages = discover("storeNo", tmp_path, profile)
+
+    g = trace(usages, tmp_path, profile, depth=2)
+
+    labels = {n["label"] for n in g["nodes"]}
+    assert "StoreMapper.selectByStoreNo" in labels
+    assert any(
+        e["from"] == "StoreService.getStoreInfoByStoreNo"
+        and e["to"] == "StoreMapper.selectByStoreNo"
+        for e in g["edges"]
+    )
+
+
 def test_trace_uses_annotation_match_for_layer(tmp_path, profiles_dir):
     source = tmp_path / "src/main/java/com/example/app/OrderLogic.java"
     source.parent.mkdir(parents=True)

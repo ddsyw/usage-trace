@@ -9,8 +9,11 @@ from pathlib import Path
 from common import add_edge, add_node, load_profile, load_graph, dump_graph
 
 _OP_BY_TAG = {"select": "select", "insert": "insert", "update": "update", "delete": "delete"}
+_SQL_IDENT = r"(?:[A-Za-z_][\w$]*|`[A-Za-z_][\w$]*`|\"[A-Za-z_][\w$]*\"|'[A-Za-z_][\w$]*')"
 _TABLE_RE = re.compile(
-    r"\b(?:from|join|into|update|table)\s+([A-Za-z_][\w.]*)", re.IGNORECASE)
+    rf"\b(?:from|join|into|update|table)\s+({_SQL_IDENT}(?:\s*\.\s*{_SQL_IDENT})?)",
+    re.IGNORECASE,
+)
 _SQL_OP_RE = re.compile(r"^\s*(select|insert|update|delete)\b", re.IGNORECASE)
 _JAVA_KEYWORDS = {
     "class", "interface", "public", "private", "protected", "return", "new",
@@ -21,13 +24,28 @@ _GENERIC_TERMS = {
     "insert", "mapper", "modify", "patch", "query", "read", "remove",
     "repository", "save", "select", "service", "update",
 }
+_MYBATIS_XML_GLOBS = (
+    "**/mapper/**/*.xml",
+    "**/mappers/**/*.xml",
+    "**/sqlmap/**/*.xml",
+    "**/sqlmaps/**/*.xml",
+    "**/*Mapper.xml",
+    "**/*Mapper*.xml",
+)
+
+
+def _rel_path(root: Path, file: Path) -> str:
+    try:
+        return file.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return str(file)
 
 
 def _tables_in_sql(sql: str) -> list[str]:
     seen: set[str] = set()
     tables: list[str] = []
     for m in _TABLE_RE.finditer(sql):
-        table = m.group(1).split(".")[-1]
+        table = re.sub(r"\s+", "", m.group(1)).split(".")[-1].strip("`\"'")
         if table not in seen:
             seen.add(table)
             tables.append(table)
@@ -52,23 +70,59 @@ def _op_from_method(method: str) -> str:
     return "unknown"
 
 
-def _parse_mybatis(root: Path, glob: str) -> list[dict]:
+def _attr_value(attrs: str, name: str) -> str | None:
+    m = re.search(rf"\b{name}\s*=\s*(['\"])(.*?)\1", attrs, re.DOTALL)
+    return m.group(2) if m else None
+
+
+def _mybatis_xml_files(root: Path, configured_glob: str | list[str] | tuple[str, ...]) -> list[Path]:
+    patterns: list[str] = []
+    if isinstance(configured_glob, str):
+        patterns.append(configured_glob)
+    else:
+        patterns.extend(str(item) for item in configured_glob)
+    patterns.extend(pattern for pattern in _MYBATIS_XML_GLOBS if pattern not in patterns)
+
+    seen: set[Path] = set()
+    files: list[Path] = []
+    for pattern in patterns:
+        for xml in Path(root).glob(pattern):
+            if not xml.is_file():
+                continue
+            resolved = xml.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            files.append(xml)
+    return files
+
+
+def _parse_mybatis(root: Path, glob: str | list[str] | tuple[str, ...]) -> list[dict]:
     """Return statement dicts for each MyBatis XML mapped statement."""
     out: list[dict] = []
-    for xml in Path(root).glob(glob):
+    statement_rx = re.compile(
+        r"<(select|insert|update|delete)\b([^>]*)>(.*?)</\1>",
+        re.DOTALL | re.IGNORECASE,
+    )
+    for xml in _mybatis_xml_files(root, glob):
         try:
             text = xml.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        ns_m = re.search(r'namespace\s*=\s*"([^"]+)"', text)
-        namespace = ns_m.group(1) if ns_m else ""
-        for tag, op in _OP_BY_TAG.items():
-            for blk in re.finditer(rf"<{tag}\s+[^>]*id\s*=\s*\"([^\"]+)\"[^>]*>(.*?)</{tag}>",
-                                   text, re.DOTALL):
-                method, sql = blk.group(1), blk.group(2)
-                tables = _tables_in_sql(sql)
-                out.append({"namespace": namespace, "method": method, "op": op,
-                            "tables": tables, "sql": sql.strip()})
+        if "<mapper" not in text.lower():
+            continue
+        mapper_m = re.search(r"<mapper\b([^>]*)>", text, re.DOTALL | re.IGNORECASE)
+        namespace = _attr_value(mapper_m.group(1), "namespace") if mapper_m else ""
+        namespace = namespace or ""
+        for blk in statement_rx.finditer(text):
+            tag, attrs, sql = blk.group(1).lower(), blk.group(2), blk.group(3)
+            method = _attr_value(attrs, "id")
+            if not method:
+                continue
+            tables = _tables_in_sql(sql)
+            out.append({"source": "mybatis_xml", "file": _rel_path(root, xml),
+                        "namespace": namespace, "method": method, "op": _OP_BY_TAG[tag],
+                        "tables": tables, "sql": sql.strip()})
     return out
 
 
@@ -114,14 +168,15 @@ def _parse_mybatis_annotations(root: Path) -> list[dict]:
                     method = mm.group(1)
                 break
             if method:
-                out.append({"qual": f"{cls}.{method}", "op": op,
+                out.append({"source": "mybatis_annotation", "file": _rel_path(root, java),
+                            "qual": f"{cls}.{method}", "method": method, "op": op,
                             "tables": _tables_in_sql(sql), "sql": sql})
     return out
 
 
 def _parse_jpa(root: Path) -> list[dict]:
     entities: dict[str, str] = {}
-    repos: list[tuple[str, str, str]] = []
+    repos: list[tuple[str, str, str, Path]] = []
     method_rx = re.compile(r"\b([A-Za-z_]\w*)\s*\([^)]*\)\s*(?:;|\{)")
     for java in Path(root).rglob("*.java"):
         try:
@@ -136,10 +191,10 @@ def _parse_jpa(root: Path) -> list[dict]:
             entities[cls] = table_m.group(1) if table_m else cls
         repo_m = re.search(r"\b(?:class|interface)\s+\w+\s+extends\s+[\w.]*Repository\s*<\s*(\w+)", text)
         if repo_m:
-            repos.append((cls, repo_m.group(1), text))
+            repos.append((cls, repo_m.group(1), text, java))
 
     out: list[dict] = []
-    for repo_cls, entity_cls, text in repos:
+    for repo_cls, entity_cls, text, file in repos:
         table = entities.get(entity_cls)
         if not table:
             continue
@@ -147,7 +202,9 @@ def _parse_jpa(root: Path) -> list[dict]:
             method = m.group(1)
             if method in {repo_cls, "JpaRepository", "CrudRepository"}:
                 continue
-            out.append({"qual": f"{repo_cls}.{method}", "op": _op_from_method(method),
+            out.append({"source": "jpa_repository", "file": _rel_path(root, file),
+                        "qual": f"{repo_cls}.{method}", "method": method,
+                        "op": _op_from_method(method),
                         "tables": [table], "sql": f"JPA {repo_cls}.{method} -> {entity_cls}"})
     return out
 
@@ -194,7 +251,8 @@ def _parse_raw_sql(root: Path, globs: list[str], unit_by_id: dict[str, dict]) ->
             lower_sql = sql.lower()
             for uid, terms in units_with_terms:
                 if terms and any(term in lower_sql for term in terms):
-                    out.append({"qual": uid, "op": _op_from_sql(sql), "tables": tables,
+                    out.append({"source": "raw_sql", "file": _rel_path(root, sql_file),
+                                "qual": uid, "op": _op_from_sql(sql), "tables": tables,
                                 "sql": sql.strip()})
 
     return out
@@ -207,7 +265,7 @@ def _java_string_literals(text: str) -> list[str]:
     return strings
 
 
-def _parse_java_sql_literals(unit_by_id: dict[str, dict]) -> list[dict]:
+def _parse_java_sql_literals(root: Path, unit_by_id: dict[str, dict]) -> list[dict]:
     out: list[dict] = []
     for uid, unit in unit_by_id.items():
         file = unit.get("file")
@@ -223,11 +281,30 @@ def _parse_java_sql_literals(unit_by_id: dict[str, dict]) -> list[dict]:
         for sql in _java_string_literals(body):
             tables = _tables_in_sql(sql)
             if tables:
-                out.append({"qual": uid, "op": _op_from_sql(sql), "tables": tables, "sql": sql})
+                out.append({"source": "java_sql_literal", "file": _rel_path(root, Path(file)),
+                            "qual": uid, "op": _op_from_sql(sql), "tables": tables, "sql": sql})
     return out
 
 
+def _statement_record(st: dict, qual: str) -> dict:
+    method = st.get("method") or qual.rsplit(".", 1)[-1]
+    return {
+        "source": st.get("source", "unknown"),
+        "file": st.get("file", ""),
+        "namespace": st.get("namespace", ""),
+        "method": method,
+        "qual": qual,
+        "statement_id": st.get("statement_id") or qual,
+        "op": st.get("op", "unknown"),
+        "tables": list(st.get("tables") or []),
+        "sql": st.get("sql", ""),
+        "linked": False,
+        "skip_reason": "",
+    }
+
+
 def resolve_tables(graph: dict, root: Path, profile: dict) -> dict:
+    root = Path(root)
     ts = profile.get("table_sources", {})
     statements: list[dict] = []
     unit_by_id = {n["id"]: n for n in graph["nodes"] if n["kind"] == "unit"}
@@ -241,16 +318,24 @@ def resolve_tables(graph: dict, root: Path, profile: dict) -> dict:
     if "raw_sql" in ts:
         statements += _parse_raw_sql(root, ts.get("raw_sql") or [], unit_by_id)
     if "java_sql_literals" in ts:
-        statements += _parse_java_sql_literals(unit_by_id)
+        statements += _parse_java_sql_literals(root, unit_by_id)
 
     table_by_name = {n.get("table"): n for n in graph["nodes"] if n["kind"] == "table"}
+    db_statements: list[dict] = []
 
     for st in statements:
-        if not st["tables"]:
-            continue
         qual = st.get("qual") or _qualname_from_namespace(st.get("namespace", ""), st["method"])
+        record = _statement_record(st, qual)
+        if not st["tables"]:
+            record["skip_reason"] = "no tables found"
+            db_statements.append(record)
+            continue
         if qual not in unit_by_id:
+            record["skip_reason"] = "not in traced call chain"
+            db_statements.append(record)
             continue  # only attach tables reached by the traced chain
+        record["linked"] = True
+        db_statements.append(record)
         for table in st["tables"]:
             if table in table_by_name:
                 tnode = table_by_name[table]
@@ -259,6 +344,7 @@ def resolve_tables(graph: dict, root: Path, profile: dict) -> dict:
                     "id": f"table:{table}", "kind": "table", "label": table,
                     "layer": "Table", "table": table, "op": st["op"],
                     "ops": [], "source_unit": qual, "source_units": [],
+                    "source_files": [], "statement_ids": [], "statement_sources": [],
                     "sql_snippet": st["sql"], "sql_snippets": [],
                 })
                 tnode = next(n for n in graph["nodes"]
@@ -268,12 +354,19 @@ def resolve_tables(graph: dict, root: Path, profile: dict) -> dict:
                 tnode["ops"].append(st["op"])
             if qual not in tnode.setdefault("source_units", []):
                 tnode["source_units"].append(qual)
+            if record["file"] and record["file"] not in tnode.setdefault("source_files", []):
+                tnode["source_files"].append(record["file"])
+            if record["statement_id"] not in tnode.setdefault("statement_ids", []):
+                tnode["statement_ids"].append(record["statement_id"])
+            if record["source"] not in tnode.setdefault("statement_sources", []):
+                tnode["statement_sources"].append(record["source"])
             if st["sql"] not in tnode.setdefault("sql_snippets", []):
                 tnode["sql_snippets"].append(st["sql"])
             tnode["op"] = ",".join(tnode["ops"])
             tnode["source_unit"] = ",".join(tnode["source_units"])
             tnode["sql_snippet"] = "\n---\n".join(tnode["sql_snippets"])
             add_edge(graph, qual, tnode["id"], "references", "confirmed")["op"] = st["op"]
+    graph["db_statements"] = db_statements
     return graph
 
 

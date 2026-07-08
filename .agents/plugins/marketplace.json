@@ -1,0 +1,21 @@
+{
+  "name": "usage-trace",
+  "interface": {
+    "displayName": "usage-trace"
+  },
+  "plugins": [
+    {
+      "name": "usage-trace",
+      "version": "0.1.0+codex.20260708021320",
+      "source": {
+        "source": "local",
+        "path": "./plugins/usage-trace"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

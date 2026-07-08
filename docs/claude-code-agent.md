@@ -14,7 +14,7 @@ python3 -m pip install -e .
 Verify:
 
 ```bash
-usage-trace --keyword storeNo --root tests/fixtures/java-spring --out /tmp/storeNo-report.html
+usage-trace --keyword storeNo --root tests/fixtures/java-spring
 ```
 
 ## 2. Install the Claude Code agent
@@ -49,19 +49,19 @@ This creates:
 Open Claude Code from the Java project root, then ask:
 
 ```text
-Use usage-trace to analyze orderId in the current project. Generate /tmp/orderId-report.html, then summarize the usage sites, call chain, and database tables.
+Use usage-trace to analyze orderId in the current project. Generate .usage-trace/orderId-report.html, then summarize the usage sites, call chain, and database tables.
 ```
 
 The agent should run:
 
 ```bash
-usage-trace --keyword orderId --root . --profile auto --depth 4 --out /tmp/orderId-report.html
+usage-trace --keyword orderId --root . --profile auto --depth 4
 ```
 
 Open the result on macOS:
 
 ```bash
-open /tmp/orderId-report.html
+open .usage-trace/orderId-report.html
 ```
 
 ## Notes

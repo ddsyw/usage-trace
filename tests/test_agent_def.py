@@ -29,7 +29,7 @@ def test_claude_code_install_doc_exists():
         ".claude/agents",
         "~/.claude/agents",
         "usage-trace --keyword orderId --root .",
-        "open /tmp/orderId-report.html",
+        "open .usage-trace/orderId-report.html",
     ]:
         assert needle in text, f"Claude Code doc missing: {needle}"
 

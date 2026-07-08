@@ -23,7 +23,7 @@ usage-trace = "usage_trace:main"
 codex-find = "usage_trace:main"
 
 [tool.setuptools]
-py-modules = ["usage_trace", "codex_find", "common", "discover", "graph", "render", "tables", "trace"]
+py-modules = ["usage_trace", "codex_find", "common", "discover", "graph", "render", "tables", "trace", "understand_rules"]
 
 [tool.setuptools.package-dir]
 "" = "src"

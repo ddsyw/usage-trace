@@ -56,14 +56,13 @@ Run against the included Spring fixture:
 ```bash
 usage-trace \
   --keyword storeNo \
-  --root tests/fixtures/java-spring \
-  --out output/storeNo-report.html
+  --root tests/fixtures/java-spring
 ```
 
 Open the report:
 
 ```bash
-open output/storeNo-report.html
+open .usage-trace/storeNo-report.html
 ```
 
 You can also run the source entrypoint directly:
@@ -71,8 +70,7 @@ You can also run the source entrypoint directly:
 ```bash
 python3 src/usage_trace.py \
   --keyword storeNo \
-  --root tests/fixtures/java-spring \
-  --out output/storeNo-report.html
+  --root tests/fixtures/java-spring
 ```
 
 ## Analyze a Real Java Project
@@ -84,14 +82,13 @@ usage-trace \
   --keyword orderId \
   --root /path/to/your/java-project \
   --profile auto \
-  --depth 4 \
-  --out /tmp/orderId-report.html
+  --depth 4
 ```
 
 Then open:
 
 ```bash
-open /tmp/orderId-report.html
+open .usage-trace/orderId-report.html
 ```
 
 Use the actual project root, usually the directory containing `pom.xml`,
@@ -110,12 +107,13 @@ usage-trace --keyword <identifier> --root <project> [options]
 - `--depth`: call-chain depth. Default is `4`; the code applies a hard cap.
 - `--max-nodes`: maximum graph nodes rendered in the report. Default is `300`.
 - `--variants`: comma-separated extra keyword variants to search.
-- `--out`: output HTML path. Default is `output/<keyword>-report.html`.
+- `--out`: optional output HTML path. Default is `.usage-trace/<keyword>-report.html`
+  in the current directory.
 
 Compatibility command:
 
 ```bash
-codex-find --keyword orderId --root /path/to/your/java-project --out /tmp/orderId-report.html
+codex-find --keyword orderId --root /path/to/your/java-project
 ```
 
 ## Claude Code Agent
@@ -147,35 +145,43 @@ bash scripts/install-claude-agent.sh user
 Then open Claude Code from the Java project root and ask:
 
 ```text
-使用 usage-trace 分析当前项目的 orderId，生成 /tmp/orderId-report.html，并总结使用位置、调用链和涉及数据库表。
+使用 usage-trace 分析当前项目的 orderId，生成 .usage-trace/orderId-report.html，并总结使用位置、调用链和涉及数据库表。
 ```
 
 The agent should run:
 
 ```bash
-usage-trace --keyword orderId --root . --profile auto --depth 4 --out /tmp/orderId-report.html
+usage-trace --keyword orderId --root . --profile auto --depth 4
 ```
 
 ## Codex Plugin
 
-This repository also includes Codex plugin metadata:
+This repository also includes Codex plugin metadata and a repo marketplace:
 
 ```text
 .codex-plugin/plugin.json
+.agents/plugins/marketplace.json
+plugins/usage-trace/.codex-plugin/plugin.json
 skills/usage-trace/SKILL.md
 ```
 
-In Codex environments that support plugin installation from a GitHub repository,
-open `/plugin` and install:
+Add the repo marketplace:
 
-```text
-https://github.com/ddsyw/usage-trace.git
+```bash
+codex plugin marketplace add ddsyw/usage-trace --ref main
+```
+
+Then open `/plugins` in Codex and install `usage-trace` from the
+`usage-trace` marketplace. CLI alternative:
+
+```bash
+codex plugin add usage-trace@usage-trace
 ```
 
 After installation, start a new Codex thread and ask:
 
 ```text
-Use usage-trace to analyze orderId in the current Java project and generate /tmp/orderId-report.html.
+Use usage-trace to analyze orderId in the current Java project and generate .usage-trace/orderId-report.html.
 ```
 
 ## Report Contents
@@ -183,10 +189,17 @@ Use usage-trace to analyze orderId in the current Java project and generate /tmp
 The generated HTML report includes:
 
 - a summary of matched usage counts and table counts
-- a layered call-chain SVG diagram
+- an interactive layered call-chain dashboard with a default main-path view,
+  left-side layer tabs, group frames, search, pan, zoom, and click-to-focus
+  neighborhood highlighting
+- Understand-Anything-style graph metadata: node type, complexity, tags,
+  weighted edges, architecture layers, guided tour steps, and cross-layer
+  relationship aggregation
 - a collapsed network overview
 - usage-site table with file, line, layer, occurrence type, and snippet
-- database table table with operation, source unit, and SQL snippet
+- database table details with operation, source unit, source file, statement id,
+  and SQL snippet
+- MyBatis XML / SQL source statements, including unlinked statements for diagnostics
 - notes about truncation and inferred edges
 
 The report is self-contained and does not require external assets.
@@ -203,6 +216,7 @@ The report is self-contained and does not require external assets.
   - keyword usage tracing
   - call-chain graph
   - package/path-based layer classification
+  - MyBatis XML mapper SQL
   - raw SQL files and Java SQL string literals
 - Non-Java languages:
   - not supported for full call-chain tracing yet
@@ -235,15 +249,17 @@ Run a focused smoke test:
 ```bash
 python3 src/usage_trace.py \
   --keyword storeNo \
-  --root tests/fixtures/java-spring \
-  --out /tmp/storeNo-report.html
+  --root tests/fixtures/java-spring
 ```
 
 ## Project Layout
 
 ```text
 .claude/agents/usage-trace.md      Claude Code subagent definition
+.agents/plugins/marketplace.json   Codex repo marketplace
+.codex-plugin/plugin.json          Root Codex plugin manifest
 docs/claude-code-agent.md          Claude Code installation and usage guide
+plugins/usage-trace/               Thin Codex plugin wrapper for marketplace install
 profiles/                          Java analysis profiles
 scripts/install-claude-agent.sh    Claude Code agent installer
 src/                               CLI and analysis phases

@@ -14,6 +14,7 @@ HARD_DEPTH_CAP = 8
 # A Java method signature: <modifiers/type> name(params) [throws ...] { or ;
 _SIG_RE = re.compile(r"\b([A-Za-z_]\w*)\s*\(([^)]*)\)\s*(throws\s+[\w.,\s]+)?\s*([{;])\s*$")
 _CONTROL = {"if", "for", "while", "switch", "catch", "return", "new", "super", "this"}
+_SIG_ANNOTATION_RE = re.compile(r"@\w+(?:\.\w+)*(?:\s*\([^()]*\))?\s*")
 
 
 # ---- Pure walk: cycle-safe, depth-capped ----
@@ -44,6 +45,10 @@ def _strip_comment(line: str) -> str:
     return line.split("//", 1)[0].rstrip()
 
 
+def _signature_line(line: str) -> str:
+    return _SIG_ANNOTATION_RE.sub("", _strip_comment(line))
+
+
 def _current_class(lines: list[str], upto: int) -> str | None:
     cls = None
     for i in range(upto):
@@ -66,7 +71,7 @@ def find_enclosing_unit(file: Path, target_line: int) -> dict | None:
     spans: list[tuple[int, int, str]] = []  # (sig_line, end_line, name)
     i = 0
     while i < len(lines):
-        raw = _strip_comment(lines[i])
+        raw = _signature_line(lines[i])
         m = _SIG_RE.search(raw)
         if m and m.group(1) not in _CONTROL:
             name = m.group(1)
@@ -112,7 +117,7 @@ def _symbol_types(unit: dict) -> dict[str, str]:
         m = field_rx.search(_strip_comment(ln))
         if m:
             types[m.group(2)] = m.group(1)
-    sig = _strip_comment(lines[unit["line"] - 1]) if unit.get("line") else ""
+    sig = _signature_line(lines[unit["line"] - 1]) if unit.get("line") else ""
     params = sig[sig.find("(") + 1:sig.rfind(")")] if "(" in sig and ")" in sig else ""
     for part in params.split(","):
         bits = part.strip().split()

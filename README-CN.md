@@ -48,14 +48,13 @@ python3 -m pip install -e ".[dev]"
 ```bash
 usage-trace \
   --keyword storeNo \
-  --root tests/fixtures/java-spring \
-  --out output/storeNo-report.html
+  --root tests/fixtures/java-spring
 ```
 
 打开报告：
 
 ```bash
-open output/storeNo-report.html
+open .usage-trace/storeNo-report.html
 ```
 
 也可以直接运行源码入口：
@@ -63,8 +62,7 @@ open output/storeNo-report.html
 ```bash
 python3 src/usage_trace.py \
   --keyword storeNo \
-  --root tests/fixtures/java-spring \
-  --out output/storeNo-report.html
+  --root tests/fixtures/java-spring
 ```
 
 ## 分析真实 Java 项目
@@ -76,14 +74,13 @@ usage-trace \
   --keyword orderId \
   --root /path/to/your/java-project \
   --profile auto \
-  --depth 4 \
-  --out /tmp/orderId-report.html
+  --depth 4
 ```
 
 打开报告：
 
 ```bash
-open /tmp/orderId-report.html
+open .usage-trace/orderId-report.html
 ```
 
 `--root` 应该指向真实 Java 项目根目录，通常是包含 `pom.xml`、`build.gradle` 或 `src/main/java` 的目录。
@@ -100,12 +97,13 @@ usage-trace --keyword <identifier> --root <project> [options]
 - `--depth`：调用链深度，默认 `4`，代码中有硬限制。
 - `--max-nodes`：报告中最多渲染的图节点数量，默认 `300`。
 - `--variants`：额外关键字变体，使用逗号分隔。
-- `--out`：输出 HTML 路径，默认 `output/<keyword>-report.html`。
+- `--out`：可选输出 HTML 路径。默认在当前目录生成
+  `.usage-trace/<keyword>-report.html`。
 
 兼容旧命令：
 
 ```bash
-codex-find --keyword orderId --root /path/to/your/java-project --out /tmp/orderId-report.html
+codex-find --keyword orderId --root /path/to/your/java-project
 ```
 
 ## Claude Code Agent 用法
@@ -137,34 +135,43 @@ bash scripts/install-claude-agent.sh user
 然后在 Java 项目根目录打开 Claude Code，输入：
 
 ```text
-使用 usage-trace 分析当前项目的 orderId，生成 /tmp/orderId-report.html，并总结使用位置、调用链和涉及数据库表。
+使用 usage-trace 分析当前项目的 orderId，生成 .usage-trace/orderId-report.html，并总结使用位置、调用链和涉及数据库表。
 ```
 
 agent 应执行：
 
 ```bash
-usage-trace --keyword orderId --root . --profile auto --depth 4 --out /tmp/orderId-report.html
+usage-trace --keyword orderId --root . --profile auto --depth 4
 ```
 
 ## Codex Plugin 用法
 
-当前仓库也包含 Codex plugin 元数据：
+当前仓库也包含 Codex plugin 元数据和 repo marketplace：
 
 ```text
 .codex-plugin/plugin.json
+.agents/plugins/marketplace.json
+plugins/usage-trace/.codex-plugin/plugin.json
 skills/usage-trace/SKILL.md
 ```
 
-在支持从 GitHub 仓库安装 plugin 的 Codex 环境中，打开 `/plugin`，安装：
+先添加 repo marketplace：
 
-```text
-https://github.com/ddsyw/usage-trace.git
+```bash
+codex plugin marketplace add ddsyw/usage-trace --ref main
+```
+
+然后在 Codex 中打开 `/plugins`，从 `usage-trace` marketplace 安装
+`usage-trace`。也可以使用 CLI 安装：
+
+```bash
+codex plugin add usage-trace@usage-trace
 ```
 
 安装后建议开启一个新的 Codex 会话，然后输入：
 
 ```text
-使用 usage-trace 分析当前 Java 项目的 orderId，并生成 /tmp/orderId-report.html。
+使用 usage-trace 分析当前 Java 项目的 orderId，并生成 .usage-trace/orderId-report.html。
 ```
 
 ## 报告内容
@@ -172,10 +179,14 @@ https://github.com/ddsyw/usage-trace.git
 生成的 HTML 报告包含：
 
 - 命中使用位置数量和涉及表数量概览
-- 分层调用链 SVG 图
+- 默认突出主路径、支持左侧层级 tab、分组外框、搜索、点击聚焦局部上下游、
+  缩放/拖拽的分层调用链 dashboard
+- 参考 Understand-Anything 的图规则生成节点类型、复杂度、标签、加权边、
+  架构层、导览步骤和跨层关系聚合
 - 折叠版网络全景图
 - 使用位置明细，包括文件、行号、层级、命中类型和代码片段
-- 数据库表明细，包括操作类型、来源单元和 SQL 片段
+- 数据库表明细，包括操作类型、来源单元、来源文件、statement id 和 SQL 片段
+- MyBatis XML / SQL 来源明细，包括未连接到当前调用链的 statement 诊断信息
 - 截断说明和推断边说明
 
 报告是单个离线 HTML 文件，不需要联网或额外静态资源。
@@ -192,6 +203,7 @@ https://github.com/ddsyw/usage-trace.git
   - 关键字使用追踪
   - 调用链图
   - 基于包路径的层级识别
+  - MyBatis XML mapper SQL
   - 原始 SQL 文件和 Java SQL 字符串
 - 非 Java 语言：
   - 暂不支持完整调用链追踪
@@ -224,15 +236,17 @@ git diff --check
 ```bash
 python3 src/usage_trace.py \
   --keyword storeNo \
-  --root tests/fixtures/java-spring \
-  --out /tmp/storeNo-report.html
+  --root tests/fixtures/java-spring
 ```
 
 ## 项目结构
 
 ```text
 .claude/agents/usage-trace.md      Claude Code subagent 定义
+.agents/plugins/marketplace.json   Codex repo marketplace
+.codex-plugin/plugin.json          根目录 Codex plugin manifest
 docs/claude-code-agent.md          Claude Code 安装和使用说明
+plugins/usage-trace/               用于 marketplace 安装的 thin Codex plugin
 profiles/                          Java 分析 profile
 scripts/install-claude-agent.sh    Claude Code agent 安装脚本
 src/                               CLI 和分析阶段代码

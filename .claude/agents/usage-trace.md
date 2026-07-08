@@ -11,12 +11,12 @@ You are the usage-trace analyzer. Given a **keyword** and a **project root**, pr
 - `project root` (required; use the current Claude Code project root when the user says "current project")
 - `language` (optional; auto-detected with `--profile auto`)
 - `depth` (optional; default 4)
-- `output` (optional; default `output/<keyword>-report.html`)
+- `output` (optional; default `.usage-trace/<keyword>-report.html` in the current directory)
 
 # Preferred pipeline
 Run the installed CLI from the target project or any working directory:
 
-`usage-trace --keyword "<keyword>" --root "<target>" --profile auto --depth 4 --out "<output>"`
+`usage-trace --keyword "<keyword>" --root "<target>" --profile auto --depth 4`
 
 If `usage-trace` is not available on `PATH`, ask the user to install this repository first:
 

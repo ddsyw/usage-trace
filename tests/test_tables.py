@@ -16,7 +16,117 @@ def test_resolves_t_order_from_mybatis(fixture_root, profiles_dir):
     assert t["op"] == "select"
     assert t["layer"] == "Table"
     assert "store_no" in t["sql_snippet"]
+    assert "src/main/resources/mapper/OrderMapper.xml" in t["source_files"]
+    statement = next(st for st in g["db_statements"] if st["statement_id"] == "OrderMapper.selectByStoreNo")
+    assert statement["source"] == "mybatis_xml"
+    assert statement["linked"] is True
+    assert statement["file"] == "src/main/resources/mapper/OrderMapper.xml"
     assert any(e["kind"] == "references" and e["to"] == t["id"] for e in g["edges"])
+
+
+def test_records_unlinked_mybatis_xml_statement(tmp_path, profiles_dir):
+    mapper_dir = tmp_path / "src/main/resources/mapper"
+    mapper_dir.mkdir(parents=True)
+    (mapper_dir / "OrderMapper.xml").write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.mapper.OrderMapper">
+  <select id="selectByStoreNo" resultType="object">
+    SELECT * FROM t_order WHERE store_no = #{storeNo}
+  </select>
+</mapper>
+""",
+        encoding="utf-8",
+    )
+    profile = load_profile("java-spring", profiles_dir)
+    g = new_graph({})
+    add_node(g, {
+        "id": "OrderService.findByStoreNo",
+        "kind": "unit",
+        "label": "OrderService.findByStoreNo",
+        "layer": "Service",
+    })
+
+    resolve_tables(g, tmp_path, profile)
+
+    assert [n for n in g["nodes"] if n["kind"] == "table"] == []
+    assert g["db_statements"] == [{
+        "source": "mybatis_xml",
+        "file": "src/main/resources/mapper/OrderMapper.xml",
+        "namespace": "com.example.mapper.OrderMapper",
+        "method": "selectByStoreNo",
+        "qual": "OrderMapper.selectByStoreNo",
+        "statement_id": "OrderMapper.selectByStoreNo",
+        "op": "select",
+        "tables": ["t_order"],
+        "sql": "SELECT * FROM t_order WHERE store_no = #{storeNo}",
+        "linked": False,
+        "skip_reason": "not in traced call chain",
+    }]
+
+
+def test_resolves_mybatis_xml_from_common_mapper_locations(tmp_path, profiles_dir):
+    mapper_dir = tmp_path / "src/main/resources/mappers"
+    mapper_dir.mkdir(parents=True)
+    (mapper_dir / "OrderMapper.xml").write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace='com.example.mapper.OrderMapper'>
+  <select id='selectByStoreNo' resultType='object'>
+    SELECT * FROM t_order WHERE store_no = #{storeNo}
+  </select>
+</mapper>
+""",
+        encoding="utf-8",
+    )
+    profile = load_profile("java-spring", profiles_dir)
+    g = new_graph({})
+    add_node(g, {
+        "id": "OrderMapper.selectByStoreNo",
+        "kind": "unit",
+        "label": "OrderMapper.selectByStoreNo",
+        "layer": "Repository",
+    })
+
+    resolve_tables(g, tmp_path, profile)
+
+    table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
+    assert len(table_nodes) == 1
+    assert table_nodes[0]["table"] == "t_order"
+    assert table_nodes[0]["source_files"] == ["src/main/resources/mappers/OrderMapper.xml"]
+    assert g["db_statements"][0]["linked"] is True
+
+
+def test_resolves_backticked_mybatis_table_names(tmp_path, profiles_dir):
+    mapper_dir = tmp_path / "src/main/resources/mappers"
+    mapper_dir.mkdir(parents=True)
+    (mapper_dir / "StoreMapper.xml").write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.mapper.StoreMapper">
+  <select id="selectByStoreNo" resultType="object">
+    select id, store_no
+    from `store`
+    where store_no = #{storeNo}
+  </select>
+</mapper>
+""",
+        encoding="utf-8",
+    )
+    profile = load_profile("java-spring", profiles_dir)
+    g = new_graph({})
+    add_node(g, {
+        "id": "StoreMapper.selectByStoreNo",
+        "kind": "unit",
+        "label": "StoreMapper.selectByStoreNo",
+        "layer": "Repository",
+    })
+
+    resolve_tables(g, tmp_path, profile)
+
+    table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
+    assert len(table_nodes) == 1
+    assert table_nodes[0]["id"] == "table:store"
+    assert table_nodes[0]["table"] == "store"
+    assert g["db_statements"][0]["tables"] == ["store"]
+    assert g["db_statements"][0]["skip_reason"] == ""
 
 
 def test_resolves_multiple_mybatis_tables_and_operations(tmp_path, profiles_dir):

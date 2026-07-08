@@ -36,6 +36,47 @@ def test_truncation_when_over_cap():
     assert g["meta"]["truncated"]["pruned_count"] >= 100
 
 
+def test_truncation_preserves_table_reference_nodes():
+    g = new_graph({})
+    seed = add_node(g, {
+        "id": "Controller.entry",
+        "kind": "unit",
+        "label": "Controller.entry",
+        "layer": "Controller",
+        "usages": [{"file": "Controller.java", "line": 1}],
+    })
+    for i in range(20):
+        extra = add_node(g, {
+            "id": f"Service.extra{i}",
+            "kind": "unit",
+            "label": f"Service.extra{i}",
+            "layer": "Service",
+        })
+        add_edge(g, seed, extra)
+    repo = add_node(g, {
+        "id": "StoreMapper.selectByStoreNo",
+        "kind": "unit",
+        "label": "StoreMapper.selectByStoreNo",
+        "layer": "Repository",
+    })
+    table = add_node(g, {
+        "id": "table:store",
+        "kind": "table",
+        "label": "store",
+        "layer": "Table",
+        "table": "store",
+    })
+    add_edge(g, seed, repo)
+    add_edge(g, repo, table, "references")
+
+    prune_and_layout(g, max_nodes=5)
+
+    ids = {n["id"] for n in g["nodes"]}
+    assert "StoreMapper.selectByStoreNo" in ids
+    assert "table:store" in ids
+    assert any(e["from"] == repo and e["to"] == table for e in g["edges"])
+
+
 def test_no_truncation_under_cap():
     g = _big_graph(50)
     prune_and_layout(g, max_nodes=300)

@@ -6,6 +6,7 @@ layers:
   - {name: Service, path_hint: "(service|logic|biz|manager)"}
   - {name: Repository, path_hint: "(repository|dao|mapper|store|persistence)"}
 table_sources:
+  mybatis: {mapper_xml_glob: "**/mapper/**/*.xml", namespace_to_interface: true}
   java_sql_literals: true
   raw_sql: ["**/*.sql"]
 call_patterns:
