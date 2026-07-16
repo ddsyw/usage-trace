@@ -1,3 +1,5 @@
+import json
+
 from common import load_profile
 from index import ProjectIndex
 
@@ -35,3 +37,43 @@ def test_resolve_callers_reverse_index(fixture_root, profiles_dir):
     idx.build(fixture_root, profile)
     callers = idx.calls_by_callee.get("selectByStoreNo", [])
     assert any(c.caller_qual == "OrderService.findByStoreNo" for c in callers)
+
+
+def _build_cached(fixture_root, profiles_dir, tmp_path):
+    profile = load_profile("java-spring", profiles_dir)
+    idx = ProjectIndex.load_or_build(fixture_root, profile, cache_dir=tmp_path)
+    return profile, idx
+
+
+def test_index_persists_and_reuses(tmp_path, fixture_root, profiles_dir):
+    profile, idx = _build_cached(fixture_root, profiles_dir, tmp_path)
+    n = len(idx.methods)
+    assert (tmp_path / "manifest.json").exists()
+    idx2 = ProjectIndex.load_or_build(fixture_root, profile, cache_dir=tmp_path)
+    assert len(idx2.methods) == n
+
+
+def test_index_invalidates_changed_file(tmp_path, fixture_root, profiles_dir):
+    profile, _ = _build_cached(fixture_root, profiles_dir, tmp_path)
+    edge = fixture_root / "src/main/java/com/example/service/EdgeCaseService.java"
+    original = edge.read_text()
+    try:
+        # Insert brandNew *inside* the class body (before its closing brace)
+        # so tree-sitter records it as EdgeCaseService.brandNew. A naive
+        # append after the file's final '}' parses as a top-level method
+        # (empty cls) and would not match the assertion below.
+        body = original.rstrip()
+        assert body.endswith("}"), "fixture must end with class closing brace"
+        mutated = body[:-1] + "\n    public void brandNew() { done(); }\n}\n"
+        edge.write_text(mutated)
+        idx2 = ProjectIndex.load_or_build(fixture_root, profile, cache_dir=tmp_path)
+        assert "EdgeCaseService.brandNew" in idx2.methods
+    finally:
+        edge.write_text(original)
+
+
+def test_index_manifest_has_version_and_root_hash(tmp_path, fixture_root, profiles_dir):
+    profile, idx = _build_cached(fixture_root, profiles_dir, tmp_path)
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    assert manifest["version"] == 1
+    assert manifest["root_hash"] == idx.root_hash
