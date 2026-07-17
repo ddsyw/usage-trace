@@ -8,10 +8,7 @@ def test_trace_builds_graph_around_usage(fixture_root, profiles_dir):
     profile = load_profile("java-spring", profiles_dir)
     idx = ProjectIndex()
     idx.build(fixture_root, profile)
-    # Brief specifies discover("storeNo", profile, None, idx) — the Task 5
-    # signature (discover(keyword, profile, extra_variants, index)). Until T5
-    # migrates discover(), seed usages via the current signature.
-    usages = discover("storeNo", fixture_root, profile)
+    usages = discover("storeNo", profile, None, idx)
     g = trace(usages, idx, profile, depth=4)
 
     ids = {n["id"] for n in g["nodes"]}
