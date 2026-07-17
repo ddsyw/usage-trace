@@ -48,12 +48,27 @@ def _root_from_index(index) -> Path:
     return Path(next(iter(index.files))).parent
 
 
+_UNESCAPE_MAP = {"n": "\n", "r": "\r", "t": "\t", "'": "'", '"': '"', "\\": "\\"}
+
+
 def _unescape(s: str) -> str:
     """Targeted Java-string unescape; avoids the unicode_escape footgun that
-    corrupts non-ASCII bytes via bytes(s,"utf-8").decode("unicode_escape")."""
-    return (s.replace("\\'", "'").replace('\\"', '"')
-             .replace("\\n", "\n").replace("\\r", "\r")
-             .replace("\\t", "\t").replace("\\\\", "\\"))
+    corrupts non-ASCII bytes via bytes(s,"utf-8").decode("unicode_escape").
+
+    Single left-to-right pass: consumes the character after each backslash so
+    that an escaped backslash (``\\\\n``) decodes to backslash + ``n`` rather
+    than being misread as ``\\n`` -> newline."""
+    out: list[str] = []
+    i = 0
+    while i < len(s):
+        if s[i] == "\\" and i + 1 < len(s):
+            nxt = s[i + 1]
+            out.append(_UNESCAPE_MAP.get(nxt, "\\" + nxt))
+            i += 2
+        else:
+            out.append(s[i])
+            i += 1
+    return "".join(out)
 
 
 def _tables_in_sql(sql: str) -> list[str]:

@@ -1,7 +1,7 @@
 from common import add_node, load_profile, new_graph
 from discover import discover
 from index import ProjectIndex
-from tables import resolve_tables
+from tables import _unescape, resolve_tables
 from trace import trace
 
 
@@ -372,3 +372,20 @@ public class OrderDao {
     table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
     assert len(table_nodes) == 1
     assert table_nodes[0]["table"] == "t_order"
+
+
+def test_unescape_handles_escape_ordering_correctly():
+    # chr(92) is backslash; construct inputs unambiguously.
+    # backslash + n (2 chars) -> real newline
+    assert _unescape(chr(92) + "n") == "\n"
+    # backslash + backslash + n (3 chars) -> backslash + n (2 chars), NOT newline
+    assert _unescape(chr(92) + chr(92) + "n") == chr(92) + "n"
+    # preserved escapes
+    assert _unescape(chr(92) + "r") == "\r"
+    assert _unescape(chr(92) + "t") == "\t"
+    assert _unescape(chr(92) + "'") == "'"
+    assert _unescape(chr(92) + '"') == '"'
+    # unknown escape passes through unchanged
+    assert _unescape(chr(92) + "x") == chr(92) + "x"
+    # trailing lone backslash passes through unchanged
+    assert _unescape("abc" + chr(92)) == "abc" + chr(92)
