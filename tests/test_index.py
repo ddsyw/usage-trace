@@ -77,3 +77,33 @@ def test_index_manifest_has_version_and_root_hash(tmp_path, fixture_root, profil
     manifest = json.loads((tmp_path / "manifest.json").read_text())
     assert manifest["version"] == 1
     assert manifest["root_hash"] == idx.root_hash
+
+
+def test_index_invalidates_blobs_on_version_mismatch(tmp_path, fixture_root, profiles_dir):
+    import json
+
+    from index import INDEX_VERSION
+    profile, idx = _build_cached(fixture_root, profiles_dir, tmp_path)
+    # Poison one blob with a method a real parse would never produce.
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    any_path = next(iter(manifest["files"]))
+    digest = manifest["files"][any_path]["hash"]
+    blob_path = tmp_path / "symbols" / f"{digest}.json"
+    blob = json.loads(blob_path.read_text())
+    blob["methods"].append({"name": "poisoned", "qual": "Poisoned.poisoned", "file": any_path,
+                            "start_line": 1, "end_line": 1, "params": {}, "cls": "Poisoned"})
+    blob_path.write_text(json.dumps(blob))
+    # Simulate a future version bump: manifest claims an older version.
+    manifest["version"] = INDEX_VERSION + 1
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest))
+
+    idx2 = ProjectIndex.load_or_build(fixture_root, profile, cache_dir=tmp_path)
+    assert "Poisoned.poisoned" not in idx2.methods  # stale blob discarded → rebuilt fresh
+
+    # The on-disk poisoned blob must also be gone, otherwise a subsequent
+    # cache hit (manifest rewritten by idx2 to INDEX_VERSION + matching hash)
+    # would reload the stale blob. This third load is what the regression
+    # actually catches; without the fix idx2 re-parses fresh in memory but
+    # _save skips the still-existing poisoned blob, so idx3 picks it up.
+    idx3 = ProjectIndex.load_or_build(fixture_root, profile, cache_dir=tmp_path)
+    assert "Poisoned.poisoned" not in idx3.methods

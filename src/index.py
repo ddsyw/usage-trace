@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 
 from common import classify_layer
@@ -94,6 +95,8 @@ class ProjectIndex:
             return []
         if receiver:
             rtype = self.symbol_types(caller_qual).get(receiver)
+            # Unknown receiver type: return [] instead of fanning out to every
+            # class with that method name (intentional precision improvement).
             return [q for q in candidates if _class_of(q) == rtype] if rtype else []
         caller = self.methods.get(caller_qual)
         caller_cls = caller.cls if caller else None
@@ -106,6 +109,11 @@ class ProjectIndex:
         idx = cls()
         idx.root_hash = _root_hash(root, profile.get("profile", ""))
         cached_manifest = _read_json(cache_dir / "manifest.json")
+        # A version or root change means old-format blobs must be discarded.
+        if (cached_manifest is None
+                or cached_manifest.get("version") != INDEX_VERSION
+                or cached_manifest.get("root_hash") != idx.root_hash):
+            shutil.rmtree(cache_dir / "symbols", ignore_errors=True)
         idx._build_from(root, profile, cached_manifest, cache_dir)
         try:
             idx._save(cache_dir)
@@ -126,12 +134,12 @@ class ProjectIndex:
         for path in _walk_sources(root, exclude):
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
+                st = path.stat()
             except OSError:
                 continue
             factory = parser_for(str(path))
             if factory is None:
                 continue
-            st = path.stat()
             digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
             self.files[str(path)] = {
                 "mtime": int(st.st_mtime), "size": st.st_size, "hash": digest,
@@ -156,8 +164,7 @@ class ProjectIndex:
         for path, fs in self._symbols_cache.items():
             digest = self.files[path]["hash"]
             target = sym_dir / f"{digest}.json"
-            if not target.exists():
-                target.write_text(json.dumps(fs.to_dict(), ensure_ascii=False), encoding="utf-8")
+            target.write_text(json.dumps(fs.to_dict(), ensure_ascii=False), encoding="utf-8")
         manifest = {"root_hash": self.root_hash, "version": INDEX_VERSION, "files": self.files}
         (cache_dir / "manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
