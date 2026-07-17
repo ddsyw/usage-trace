@@ -61,13 +61,18 @@ def run(keyword: str, root: Path | str, profile_name: str = "auto",
     root = Path(root)
     profile_name = detect_profile_name(root) if profile_name == "auto" else profile_name
     profile = load_profile(profile_name, _profile_dir())
-    usages = discover(keyword, root, profile, variants)
+    profile.setdefault("profile", profile_name)
+
+    from index import ProjectIndex
+    index = ProjectIndex.load_or_build(root, profile)
+
+    usages = discover(keyword, profile, variants, index)
     if usages:
-        graph = trace(usages, root, profile, depth)
+        graph = trace(usages, index, profile, depth)
     else:
         graph = new_graph({"depth": min(depth, HARD_DEPTH_CAP)})
     graph["meta"]["profile"] = profile_name
-    graph = resolve_tables(graph, root, profile)
+    graph = resolve_tables(graph, index, profile)
     graph = prune_and_layout(graph, max_nodes, _layer_order(profile))
 
     output = Path(out) if out is not None else Path(".usage-trace") / f"{keyword}-report.html"

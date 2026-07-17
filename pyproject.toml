@@ -10,6 +10,8 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "pyyaml>=6.0",
+  "tree-sitter>=0.25",
+  "tree-sitter-java>=0.23",
 ]
 
 [project.optional-dependencies]
@@ -23,7 +25,7 @@ usage-trace = "usage_trace:main"
 codex-find = "usage_trace:main"
 
 [tool.setuptools]
-py-modules = ["usage_trace", "codex_find", "common", "discover", "graph", "render", "tables", "trace", "understand_rules"]
+py-modules = ["usage_trace", "codex_find", "common", "discover", "graph", "render", "tables", "trace", "understand_rules", "index", "parsing"]
 
 [tool.setuptools.package-dir]
 "" = "src"
