@@ -16,6 +16,7 @@ _SOURCE_EXTS = (".java",)  # P1; P4 adds .cs/.py via LANGUAGES
 class ProjectIndex:
     def __init__(self) -> None:
         self.root_hash: str = ""
+        self.root: Path | None = None               # real project root (for relative paths)
         self.files: dict[str, dict] = {}            # path -> {mtime, size, hash}
         self.methods: dict[str, object] = {}        # qual -> MethodSymbol
         self.methods_by_name: dict[str, list[str]] = {}
@@ -29,6 +30,7 @@ class ProjectIndex:
 
     def build(self, root: Path, profile: dict) -> "ProjectIndex":
         root = Path(root)
+        self.root = root
         self.root_hash = _root_hash(root, profile.get("profile", ""))
         layers = profile.get("layers", [])
         exclude = set(profile.get("exclude", {}).get("dirs", []))
@@ -113,6 +115,7 @@ class ProjectIndex:
 
     def _build_from(self, root: Path, profile: dict, cached_manifest: dict | None,
                     cache_dir: Path) -> "ProjectIndex":
+        self.root = root
         layers = profile.get("layers", [])
         exclude = set(profile.get("exclude", {}).get("dirs", []))
         cached_files: dict[str, dict] = {}

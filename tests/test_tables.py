@@ -1,14 +1,22 @@
 from common import add_node, load_profile, new_graph
 from discover import discover
-from trace import trace
+from index import ProjectIndex
 from tables import resolve_tables
+from trace import trace
+
+
+def _build_index(root, profile):
+    idx = ProjectIndex()
+    idx.build(root, profile)
+    return idx
 
 
 def test_resolves_t_order_from_mybatis(fixture_root, profiles_dir):
     profile = load_profile("java-spring", profiles_dir)
-    usages = discover("storeNo", fixture_root, profile)
-    g = trace(usages, fixture_root, profile, depth=4)
-    g = resolve_tables(g, fixture_root, profile)
+    idx = _build_index(fixture_root, profile)
+    usages = discover("storeNo", profile, None, idx)
+    g = trace(usages, idx, profile, 4)
+    g = resolve_tables(g, idx, profile)
 
     table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
     assert any(n["table"] == "t_order" for n in table_nodes)
@@ -45,8 +53,9 @@ def test_records_unlinked_mybatis_xml_statement(tmp_path, profiles_dir):
         "label": "OrderService.findByStoreNo",
         "layer": "Service",
     })
+    idx = _build_index(tmp_path, profile)
 
-    resolve_tables(g, tmp_path, profile)
+    resolve_tables(g, idx, profile)
 
     assert [n for n in g["nodes"] if n["kind"] == "table"] == []
     assert g["db_statements"] == [{
@@ -85,8 +94,9 @@ def test_resolves_mybatis_xml_from_common_mapper_locations(tmp_path, profiles_di
         "label": "OrderMapper.selectByStoreNo",
         "layer": "Repository",
     })
+    idx = _build_index(tmp_path, profile)
 
-    resolve_tables(g, tmp_path, profile)
+    resolve_tables(g, idx, profile)
 
     table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
     assert len(table_nodes) == 1
@@ -118,8 +128,9 @@ def test_resolves_backticked_mybatis_table_names(tmp_path, profiles_dir):
         "label": "StoreMapper.selectByStoreNo",
         "layer": "Repository",
     })
+    idx = _build_index(tmp_path, profile)
 
-    resolve_tables(g, tmp_path, profile)
+    resolve_tables(g, idx, profile)
 
     table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
     assert len(table_nodes) == 1
@@ -159,8 +170,9 @@ def test_resolves_multiple_mybatis_tables_and_operations(tmp_path, profiles_dir)
         "label": "OrderMapper.updateByStoreNo",
         "layer": "Repository",
     })
+    idx = _build_index(tmp_path, profile)
 
-    resolve_tables(g, tmp_path, profile)
+    resolve_tables(g, idx, profile)
 
     by_table = {n["table"]: n for n in g["nodes"] if n["kind"] == "table"}
     assert set(by_table) == {"t_order", "t_store"}
@@ -209,8 +221,9 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long> {
         "layer": "Repository",
         "file": str(repo),
     })
+    idx = _build_index(tmp_path, profile)
 
-    resolve_tables(g, tmp_path, profile)
+    resolve_tables(g, idx, profile)
 
     table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
     assert len(table_nodes) == 1
@@ -242,8 +255,9 @@ public interface OrderMapper {
         "layer": "Repository",
         "file": str(mapper),
     })
+    idx = _build_index(tmp_path, profile)
 
-    resolve_tables(g, tmp_path, profile)
+    resolve_tables(g, idx, profile)
 
     table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
     assert len(table_nodes) == 1
@@ -267,8 +281,9 @@ def test_resolves_raw_sql_files_with_keyword_usage(tmp_path, profiles_dir):
         "layer": "Service",
         "usages": [{"snippet": "return runSql(\"storeNo\");"}],
     })
+    idx = _build_index(tmp_path, profile)
 
-    resolve_tables(g, tmp_path, profile)
+    resolve_tables(g, idx, profile)
 
     table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
     assert len(table_nodes) == 1
@@ -292,8 +307,9 @@ def test_resolves_raw_sql_files_from_unit_name_terms(tmp_path, profiles_dir):
         "label": "OrderService.findByStoreNo",
         "layer": "Service",
     })
+    idx = _build_index(tmp_path, profile)
 
-    resolve_tables(g, tmp_path, profile)
+    resolve_tables(g, idx, profile)
 
     table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
     assert len(table_nodes) == 1
@@ -315,8 +331,9 @@ def test_raw_sql_does_not_match_only_on_generic_class_or_table_terms(tmp_path, p
         "label": "OrderService.findByCustomerId",
         "layer": "Service",
     })
+    idx = _build_index(tmp_path, profile)
 
-    resolve_tables(g, tmp_path, profile)
+    resolve_tables(g, idx, profile)
 
     table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
     assert table_nodes == []
@@ -348,8 +365,9 @@ public class OrderDao {
         "line": 4,
         "end_line": 7,
     })
+    idx = _build_index(tmp_path, profile)
 
-    resolve_tables(g, tmp_path, profile)
+    resolve_tables(g, idx, profile)
 
     table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
     assert len(table_nodes) == 1

@@ -41,6 +41,21 @@ def _rel_path(root: Path, file: Path) -> str:
         return str(file)
 
 
+def _root_from_index(index) -> Path:
+    """Best-effort root derivation when no explicit root is stored on the index."""
+    if not getattr(index, "files", None):
+        return Path(".")
+    return Path(next(iter(index.files))).parent
+
+
+def _unescape(s: str) -> str:
+    """Targeted Java-string unescape; avoids the unicode_escape footgun that
+    corrupts non-ASCII bytes via bytes(s,"utf-8").decode("unicode_escape")."""
+    return (s.replace("\\'", "'").replace('\\"', '"')
+             .replace("\\n", "\n").replace("\\r", "\r")
+             .replace("\\t", "\t").replace("\\\\", "\\"))
+
+
 def _tables_in_sql(sql: str) -> list[str]:
     seen: set[str] = set()
     tables: list[str] = []
@@ -137,13 +152,13 @@ def _class_name(text: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _parse_mybatis_annotations(root: Path) -> list[dict]:
+def _parse_mybatis_annotations(root: Path, index) -> list[dict]:
     out: list[dict] = []
     annotation_rx = re.compile(
         r"@(?:[\w.]+\.)?(Select|Insert|Update|Delete)\s*\(\s*\"((?:\\.|[^\"])*)\""
     )
     method_rx = re.compile(r"\b([A-Za-z_]\w*)\s*\([^)]*\)\s*(?:;|\{)?")
-    for java in Path(root).rglob("*.java"):
+    for java in [Path(p) for p in index.files if p.endswith(".java")]:
         try:
             lines = java.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
@@ -157,7 +172,7 @@ def _parse_mybatis_annotations(root: Path) -> list[dict]:
             if not m:
                 continue
             op = m.group(1).lower()
-            sql = bytes(m.group(2), "utf-8").decode("unicode_escape")
+            sql = _unescape(m.group(2))
             method = None
             for nxt in lines[i + 1:]:
                 stripped = nxt.strip()
@@ -174,11 +189,11 @@ def _parse_mybatis_annotations(root: Path) -> list[dict]:
     return out
 
 
-def _parse_jpa(root: Path) -> list[dict]:
+def _parse_jpa(root: Path, index) -> list[dict]:
     entities: dict[str, str] = {}
     repos: list[tuple[str, str, str, Path]] = []
     method_rx = re.compile(r"\b([A-Za-z_]\w*)\s*\([^)]*\)\s*(?:;|\{)")
-    for java in Path(root).rglob("*.java"):
+    for java in [Path(p) for p in index.files if p.endswith(".java")]:
         try:
             text = java.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -261,7 +276,7 @@ def _parse_raw_sql(root: Path, globs: list[str], unit_by_id: dict[str, dict]) ->
 def _java_string_literals(text: str) -> list[str]:
     strings: list[str] = []
     for m in re.finditer(r'"((?:\\.|[^"\\])*)"', text, re.DOTALL):
-        strings.append(bytes(m.group(1), "utf-8").decode("unicode_escape"))
+        strings.append(_unescape(m.group(1)))
     return strings
 
 
@@ -303,8 +318,8 @@ def _statement_record(st: dict, qual: str) -> dict:
     }
 
 
-def resolve_tables(graph: dict, root: Path, profile: dict) -> dict:
-    root = Path(root)
+def resolve_tables(graph: dict, index, profile: dict) -> dict:
+    root = Path(index.root) if getattr(index, "root", None) else _root_from_index(index)
     ts = profile.get("table_sources", {})
     statements: list[dict] = []
     unit_by_id = {n["id"]: n for n in graph["nodes"] if n["kind"] == "unit"}
@@ -312,9 +327,9 @@ def resolve_tables(graph: dict, root: Path, profile: dict) -> dict:
     if "mybatis" in ts:
         glob = ts["mybatis"].get("mapper_xml_glob", "**/mapper/**/*.xml")
         statements += _parse_mybatis(root, glob)
-        statements += _parse_mybatis_annotations(root)
+        statements += _parse_mybatis_annotations(root, index)
     if "jpa" in ts:
-        statements += _parse_jpa(root)
+        statements += _parse_jpa(root, index)
     if "raw_sql" in ts:
         statements += _parse_raw_sql(root, ts.get("raw_sql") or [], unit_by_id)
     if "java_sql_literals" in ts:
@@ -378,8 +393,10 @@ def main() -> None:
     args = ap.parse_args()
     profiles_dir = Path(__file__).resolve().parent.parent / "profiles"
     profile = load_profile(args.profile, profiles_dir)
+    from index import ProjectIndex
+    index = ProjectIndex.load_or_build(Path(args.root), profile)
     graph = load_graph(Path(args.graph).read_text(encoding="utf-8"))
-    resolve_tables(graph, Path(args.root), profile)
+    resolve_tables(graph, index, profile)
     sys.stdout.write(dump_graph(graph))
 
 
