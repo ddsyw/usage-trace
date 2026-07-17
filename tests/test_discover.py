@@ -4,6 +4,7 @@ from pathlib import Path
 
 from common import load_profile
 from discover import keyword_variants, layer_of, discover, main
+from index import ProjectIndex
 
 
 def test_variants_cover_forms():
@@ -27,7 +28,9 @@ def test_layer_of_by_annotation_match_when_path_is_generic():
 
 def test_discovers_fixture_sites(fixture_root, profiles_dir):
     profile = load_profile("java-spring", profiles_dir)
-    sites = discover("storeNo", fixture_root, profile)
+    idx = ProjectIndex()
+    idx.build(fixture_root, profile)
+    sites = discover("storeNo", profile, None, idx)
     files = {Path(s["file"]).name for s in sites}
     assert "OrderController.java" in files
     assert "OrderService.java" in files
@@ -39,7 +42,9 @@ def test_discovers_fixture_sites(fixture_root, profiles_dir):
 
 def test_discover_ignores_comment_only_matches(fixture_root, profiles_dir):
     profile = load_profile("java-spring", profiles_dir)
-    sites = discover("storeNo", fixture_root, profile)
+    idx = ProjectIndex()
+    idx.build(fixture_root, profile)
+    sites = discover("storeNo", profile, None, idx)
     assert not any("Same method name" in s["snippet"] for s in sites)
 
 

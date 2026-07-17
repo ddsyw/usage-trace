@@ -7,7 +7,7 @@ import re
 import sys
 from pathlib import Path
 
-from common import classify_layer, grep, load_profile
+from common import classify_layer, load_profile
 
 _CONTROL = {"if", "for", "while", "switch", "catch", "return", "new", "super", "this"}
 
@@ -78,49 +78,49 @@ def _code_portion(text: str) -> str:
     return text if comment_at is None else text[:comment_at]
 
 
-def discover(keyword: str, root: Path, profile: dict,
-             extra_variants: list[str] | None = None) -> list[dict]:
+def discover(keyword: str, profile: dict, extra_variants: list[str] | None = None,
+             index=None) -> list[dict]:
     variants = keyword_variants(keyword, extra_variants)
     pattern = "|".join(re.escape(v) for v in variants)
-    exclude = profile.get("exclude", {}).get("dirs", [])
+    rx = re.compile(pattern)
     layers = profile.get("layers", [])
     sites: list[dict] = []
-    file_text_cache: dict[str, str] = {}
-    for h in grep(pattern, Path(root), "*", exclude):
-        code = _code_portion(h["text"])
-        m = re.search(pattern, code)
-        if not m:
+    paths = list(index.files.keys()) if index is not None else []
+    for path in paths:
+        try:
+            text = Path(path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
             continue
-        if h["file"] not in file_text_cache:
-            try:
-                file_text_cache[h["file"]] = Path(h["file"]).read_text(
-                    encoding="utf-8", errors="replace")
-            except OSError:
-                file_text_cache[h["file"]] = ""
-        otype = _occurrence_type(h["text"], m) if m else "identifier"
-        sites.append({
-            "file": h["file"],
-            "line": h["line"],
-            "col": m.start() + 1,
-            "occurrence_type": otype,
-            "layer": layer_of(h["file"], layers, file_text_cache[h["file"]]),
-            "snippet": h["text"].strip(),
-        })
+        layer = index.layers.get(path) if index is not None else None
+        for i, line in enumerate(text.splitlines(), 1):
+            code = _code_portion(line)
+            m = rx.search(code)
+            if not m:
+                continue
+            sites.append({
+                "file": path,
+                "line": i,
+                "col": m.start() + 1,
+                "occurrence_type": _occurrence_type(line, m),
+                "layer": layer or classify_layer(path, layers, text),
+                "snippet": line.strip(),
+            })
     return sites
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="usage-trace Phase 1: discover usage sites.")
     ap.add_argument("--keyword", required=True)
-    ap.add_argument("--variants", default="",
-                    help="comma-separated extra variants (optional; auto-expanded if empty)")
+    ap.add_argument("--variants", default="")
     ap.add_argument("--root", required=True)
     ap.add_argument("--profile", required=True)
     args = ap.parse_args()
     profiles_dir = Path(__file__).resolve().parent.parent / "profiles"
     profile = load_profile(args.profile, profiles_dir)
+    from index import ProjectIndex
+    index = ProjectIndex.load_or_build(Path(args.root), profile)
     extra_variants = [v.strip() for v in args.variants.split(",") if v.strip()]
-    sites = discover(args.keyword, Path(args.root), profile, extra_variants)
+    sites = discover(args.keyword, profile, extra_variants, index)
     json.dump(sites, sys.stdout, ensure_ascii=False, indent=2)
 
 
