@@ -401,6 +401,27 @@ def _layer_edges_html(graph: dict) -> str:
     )
 
 
+def _method_source(node: dict, max_chars: int = 2000) -> str:
+    """Slice a unit node's method body text from its source file.
+
+    Returns "" when file/line/end_line are missing or unreadable (e.g. table
+    nodes, which lack these fields), so it is harmless to call on any node.
+    """
+    file = node.get("file")
+    start = node.get("line")
+    end = node.get("end_line")
+    if not (file and start and end):
+        return ""
+    try:
+        lines = Path(file).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    body = "\n".join(lines[start - 1:end])
+    if len(body) > max_chars:
+        return body[:max_chars] + "…"
+    return body
+
+
 def _dashboard_graph_json(graph: dict) -> str:
     positions = _node_positions(graph)
     payload = {
@@ -412,6 +433,7 @@ def _dashboard_graph_json(graph: dict) -> str:
                 "y": positions.get(node["id"], (0, 0))[1],
                 "width": NODE_W,
                 "height": NODE_H,
+                "source": _method_source(node),
             }
             for node in graph.get("nodes", [])
         ],

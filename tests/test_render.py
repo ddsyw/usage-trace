@@ -169,3 +169,36 @@ def test_panorama_present_and_renderable():
 
 def test_template_file_exists():
     assert TMPL.exists()
+
+
+def test_method_source_slices_body():
+    from render import _method_source
+
+    node = {"file": __file__, "line": 1, "end_line": 3}
+    src = _method_source(node)
+    assert isinstance(src, str) and src  # non-empty
+
+
+def test_method_source_handles_missing_fields():
+    from render import _method_source
+
+    assert _method_source({}) == ""
+    assert _method_source({"file": "/nope.py", "line": 1, "end_line": 2}) == ""
+
+
+def test_payload_unit_nodes_carry_source(fixture_root, profiles_dir):
+    from index import ProjectIndex
+    from trace import trace
+    from discover import discover
+    from common import load_profile
+
+    profile = load_profile("java-spring", profiles_dir)
+    idx = ProjectIndex()
+    idx.build(fixture_root, profile)
+    g = trace(discover("storeNo", profile, None, idx), idx, profile, 4)
+    tmpl = fixture_root.parent.parent.parent / "templates" / "report.html.tmpl"
+    html = render(g, "storeNo",
+                  {"project": "x", "language": "java-spring", "generated_at": ""}, tmpl)
+    start = html.find('id="graph-data"')
+    assert start != -1
+    assert "selectByStoreNo" in html[start:]  # findByStoreNo's source includes the call
