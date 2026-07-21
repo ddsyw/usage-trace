@@ -186,6 +186,23 @@ def test_method_source_handles_missing_fields():
     assert _method_source({"file": "/nope.py", "line": 1, "end_line": 2}) == ""
 
 
+def test_p2_markers_render(fixture_root, profiles_dir):
+    from index import ProjectIndex
+    from trace import trace
+    from discover import discover
+    from common import load_profile
+
+    profile = load_profile("java-spring", profiles_dir)
+    idx = ProjectIndex()
+    idx.build(fixture_root, profile)
+    g = trace(discover("storeNo", profile, None, idx), idx, profile, 4)
+    tmpl = fixture_root.parent.parent.parent / "templates" / "report.html.tmpl"
+    html = render(g, "storeNo",
+                  {"project": "x", "language": "java-spring", "generated_at": ""}, tmpl)
+    for marker in ['id="theme-toggle"', 'id="persona-group"', "legend", "data-theme"]:
+        assert marker in html, marker
+
+
 def test_payload_unit_nodes_carry_source(fixture_root, profiles_dir):
     from index import ProjectIndex
     from trace import trace
