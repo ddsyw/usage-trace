@@ -116,6 +116,15 @@
     box-shadow:var(--shadow-sm);transition:border-color .15s,color .15s;
   }
   .theme-toggle:hover{border-color:var(--accent);color:var(--accent)}
+  .persona-btn{
+    border:1px solid var(--line);background:var(--panel-2);color:var(--ink);
+    border-radius:var(--r-pill);padding:5px 12px;cursor:pointer;font-size:var(--fs-sm);
+    box-shadow:var(--shadow-sm);transition:border-color .15s,color .15s,background .15s;
+  }
+  .persona-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .persona-btn.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:700}
+  .ni-summary .notes{margin:0}
+  .ni-rel .link-list code{display:inline-block;background:var(--code);border-radius:4px;padding:2px 6px;font-size:var(--fs-base)}
   main{display:grid;grid-template-columns:270px minmax(0,1fr) 360px;min-height:0}
   aside,.details{min-height:0;overflow:auto;background:var(--panel);border-right:1px solid var(--line)}
   .details{border-right:0;border-left:1px solid var(--line)}
@@ -241,8 +250,6 @@
   [data-persona="pm"] .ni-source,
   [data-persona="pm"] .ni-rel,
   [data-persona="pm"] .ni-complexity{display:none}
-  [data-persona="exec"] .ni-source,
-  [data-persona="exec"] .ni-complexity{display:none}
   @media (max-width:980px){
     .shell{height:auto;min-height:100vh;overflow:visible}
     header{align-items:flex-start;flex-direction:column}
@@ -490,15 +497,6 @@
   function relatedEdges(id){
     return edges.filter((edge) => edge.from === id || edge.to === id);
   }
-  function connectedNodes(id){
-    const found = [];
-    for (const edge of relatedEdges(id)) {
-      const other = edge.from === id ? edge.to : edge.from;
-      const node = nodeMap.get(other);
-      if (node) found.push({ node, edge });
-    }
-    return found;
-  }
   function listItems(values){
     const items = (Array.isArray(values) ? values : String(values || "").split(","))
       .map((value) => String(value || "").trim())
@@ -522,6 +520,60 @@
       </div>
     `;
   }
+  const COMPLEXITY_CN = { simple: "简单", moderate: "中等", complex: "复杂" };
+  function activePersona(){
+    return document.documentElement.dataset.persona || "senior";
+  }
+  function complexityBadge(node){
+    if (!node.complexity) return "";
+    const persona = activePersona();
+    const text = persona === "junior" ? (COMPLEXITY_CN[node.complexity] || node.complexity) : node.complexity;
+    return `<span class="badge ni-complexity" data-complexity="${esc(node.complexity)}">${esc(text)}</span>`;
+  }
+  function tagChips(node){
+    if (!Array.isArray(node.tags) || !node.tags.length) return "";
+    return node.tags.map((tag) => `<span class="badge">${esc(tag)}</span>`).join("");
+  }
+  function summaryBlock(node){
+    if (!node.summary) return "";
+    return `<div class="field ni-summary"><b>概要</b><p class="notes">${esc(node.summary)}</p></div>`;
+  }
+  function sourceBlock(node){
+    if (!node.source) return "";
+    const lines = String(node.source).replace(/^\n+|\n+$/g, "").split("\n");
+    const numbered = lines.map((ln, i) => `${String(i + 1).padStart(3, " ")}  ${ln}`).join("\n");
+    return `<div class="field ni-source"><b>方法源码</b><pre>${esc(numbered)}</pre></div>`;
+  }
+  function callNeighbors(id, direction){
+    // direction: "out" = callees (edge.from === id), "in" = callers (edge.to === id)
+    return edges
+      .filter((edge) => edge.kind === "call" && (direction === "out" ? edge.from === id : edge.to === id))
+      .map((edge) => nodeMap.get(direction === "out" ? edge.to : edge.from))
+      .filter(Boolean);
+  }
+  function relLinkList(id, direction){
+    const targets = callNeighbors(id, direction);
+    if (!targets.length) return '<span class="muted">无</span>';
+    if (activePersona() === "junior") {
+      // junior: simplified, names only (not clickable)
+      return targets.map((n) => `<code>${esc(n.label || n.id)}</code>`).join(" ");
+    }
+    return targets.map((n) =>
+      `<button type="button" data-node-id="${esc(n.id)}">${esc(n.label || n.id)}</button>`
+    ).join("");
+  }
+  function relatedTablesBlock(id){
+    // references edges → table nodes. Guarded: returns "" when none.
+    const targets = edges
+      .filter((edge) => edge.kind === "references" && edge.from === id)
+      .map((edge) => nodeMap.get(edge.to))
+      .filter((n) => n && n.kind === "table");
+    if (!targets.length) return "";
+    const items = targets.map((n) =>
+      `<button type="button" data-node-id="${esc(n.id)}">${esc(n.label || n.id)}${n.op ? ' · ' + esc(n.op) : ''}</button>`
+    ).join("");
+    return `<div class="field ni-tables"><b>相关表</b><div class="link-list">${items}</div></div>`;
+  }
   function renderDetails(id){
     const node = nodeMap.get(id);
     if (!node) {
@@ -529,8 +581,10 @@
       return;
     }
     const badges = [
-      node.kind ? `<span class="badge">${esc(node.kind)}</span>` : "",
+      node.type ? `<span class="badge">${esc(node.type)}</span>` : "",
+      node.kind && node.kind !== node.type ? `<span class="badge">${esc(node.kind)}</span>` : "",
       node.layer ? `<span class="badge">${esc(node.layer)}</span>` : "",
+      complexityBadge(node),
       node.table ? `<span class="badge">table ${esc(node.table)}</span>` : "",
       node.op ? `<span class="badge">${esc(node.op)}</span>` : ""
     ].join("");
@@ -538,23 +592,24 @@
       `<div class="field"><b>${esc(usage.file || "")}:${esc(usage.line || "")}</b><pre>${esc(usage.snippet || "")}</pre></div>`
     ).join("");
     const sql = node.sql_snippet ? `<div class="field"><b>SQL</b><pre>${esc(node.sql_snippet)}</pre></div>` : "";
-    const source = node.source_unit ? `<div class="field"><b>Source unit</b><code>${esc(node.source_unit)}</code></div>` : "";
+    const sourceUnit = node.source_unit ? `<div class="field"><b>Source unit</b><code>${esc(node.source_unit)}</code></div>` : "";
     const sourceFiles = (node.source_files || []).map((file) =>
       `<code>${esc(file)}</code>`
     ).join("<br>");
     const sourceFileBlock = sourceFiles ? `<div class="field"><b>Source files</b>${sourceFiles}</div>` : "";
     const tableDetails = renderTableDetails(node);
-    const links = connectedNodes(id).map(({ node: linked, edge }) =>
-      `<button type="button" data-node-id="${esc(linked.id)}">${esc(edge.from === id ? "to" : "from")} · ${esc(linked.label || linked.id)}</button>`
-    ).join("");
     details.innerHTML = `
       <h2>${esc(node.label || node.id)}</h2>
-      <div class="badge-row">${badges}</div>
-      ${source}
+      <div class="badge-row">${badges}${tagChips(node)}</div>
+      ${summaryBlock(node)}
+      ${relatedTablesBlock(id)}
+      <div class="field ni-rel"><b>调用 (callees)</b><div class="link-list">${relLinkList(id, "out")}</div></div>
+      <div class="field ni-rel"><b>被调用 (callers)</b><div class="link-list">${relLinkList(id, "in")}</div></div>
+      ${sourceBlock(node)}
+      ${sourceUnit}
       ${sourceFileBlock}
       ${tableDetails}
       ${sql}
-      <div class="field"><b>Connected nodes</b><div class="link-list">${links || '<span class="muted">无连接节点</span>'}</div></div>
       <div class="field"><b>Usages</b>${usages || '<span class="muted">无使用位置</span>'}</div>
     `;
     details.querySelectorAll("[data-node-id]").forEach((button) => {
@@ -660,6 +715,42 @@
     dragging = false;
     scroll.classList.remove("dragging");
   });
+
+  // ---- persona buttons (T3) ----
+  const PERSONAS = [
+    { id: "senior", label: "资深" },
+    { id: "junior", label: "初级" },
+    { id: "pm", label: "PM" }
+  ];
+  const PERSONA_KEY = "usage-trace-persona";
+  const personaGroup = document.getElementById("persona-group");
+  function applyPersona(id, rerender){
+    const safe = PERSONAS.some((p) => p.id === id) ? id : "senior";
+    document.documentElement.dataset.persona = safe;
+    try { localStorage.setItem(PERSONA_KEY, safe); } catch (_){}
+    personaGroup.querySelectorAll("button").forEach((btn) => {
+      const isActive = btn.dataset.persona === safe;
+      btn.classList.toggle("active", isActive);
+      btn.setAttribute("aria-pressed", String(isActive));
+    });
+    if (rerender && selectedId) renderDetails(selectedId);
+  }
+  PERSONAS.forEach((p) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "persona-btn";
+    btn.dataset.persona = p.id;
+    btn.textContent = p.label;
+    btn.setAttribute("aria-pressed", "false");
+    btn.addEventListener("click", () => applyPersona(p.id, true));
+    personaGroup.appendChild(btn);
+  });
+  let savedPersona = "senior";
+  try {
+    const v = localStorage.getItem(PERSONA_KEY);
+    if (v) savedPersona = v;
+  } catch (_){}
+  applyPersona(savedPersona, false);
 
   setViewBox();
   applyMainPathView();
