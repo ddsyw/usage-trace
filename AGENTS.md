@@ -52,7 +52,7 @@ skills/                 Skill definition (SKILL.md)
 .cursor-plugin/         Cursor plugin + marketplace manifests
 plugins/usage-trace/    thin multi-platform plugin wrapper for marketplace install
 .agents/plugins/        Codex repo marketplace manifest
-scripts/                install-skill.sh
+scripts/                install.sh, install-skill.sh, hooks/
 docs/                   guides (skill-install.md)
 ```
 
@@ -60,7 +60,8 @@ docs/                   guides (skill-install.md)
 ## Operations
 
 - Analysis runs via the local CLI (`usage-trace` / `python3 src/usage_trace.py`). Skill is optional glue for coding agents.
-- Ops guide: `docs/skill-install.md`. Install skill with `scripts/install-skill.sh` (not a subagent).
+- Ops guide: `docs/skill-install.md`. Unified install: `scripts/install.sh` (CLI + skill symlink). Skill-only: `scripts/install-skill.sh`.
+- Optional maintainer hook: `bash scripts/install.sh hooks` keeps thin plugin `SKILL.md` in sync.
 - `install-claude-agent.sh` is a deprecated wrapper that forwards to `install-skill.sh`.
 
 ## Conventions

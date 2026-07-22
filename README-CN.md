@@ -135,7 +135,8 @@ skills/usage-trace/SKILL.md
 仍须先安装 CLI，再装 skill：
 
 ```bash
-bash scripts/install-skill.sh user              # 用户级 skill 目录
+bash scripts/install.sh                         # CLI + skill symlink（推荐）
+bash scripts/install.sh / install-skill.sh user              # 用户级 skill 目录
 bash scripts/install-skill.sh project /path/to/java-project
 bash scripts/install-skill.sh codex-user        # 仅 ~/.codex/skills
 ```

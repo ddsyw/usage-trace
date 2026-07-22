@@ -37,16 +37,18 @@ def test_skill_install_doc_exists():
     text = DOC.read_text(encoding="utf-8")
     for needle in [
         "install-skill.sh",
+        "install.sh",
         "~/.claude/skills",
         "usage-trace --keyword orderId --root .",
         "skill",
+        "symlink",
     ]:
         assert needle in text, f"skill install doc missing: {needle}"
 
 
 def test_skill_installer_exists():
     text = INSTALLER.read_text(encoding="utf-8")
-    for needle in ["user", "project", "codex-user", "SKILL.md", "skills/usage-trace"]:
+    for needle in ["user", "project", "codex-user", "SKILL.md", "skills/usage-trace", "--symlink", "--copy"]:
         assert needle in text, f"installer missing: {needle}"
 
 

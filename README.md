@@ -146,6 +146,7 @@ skills/usage-trace/SKILL.md
 CLI must still be installed first. Then:
 
 ```bash
+bash scripts/install.sh                         # CLI + skill symlink (recommended)
 bash scripts/install-skill.sh user              # Claude + agents + Cursor skill dirs
 bash scripts/install-skill.sh project /path/to/java-project
 bash scripts/install-skill.sh codex-user        # ~/.codex/skills only
