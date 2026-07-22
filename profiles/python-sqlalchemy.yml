@@ -1,4 +1,5 @@
 profile: python-sqlalchemy
+source_exts: ['.py']
 detect:
   files: [pyproject.toml, setup.py, requirements.txt]
 layers:

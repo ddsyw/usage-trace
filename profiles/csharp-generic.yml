@@ -1,4 +1,5 @@
 profile: csharp-generic
+source_exts: ['.cs']
 detect:
   files: ["*.csproj", "*.sln"]
 layers:

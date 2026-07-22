@@ -2,6 +2,8 @@ namespace Example.Data
 {
     public class OrderRepository
     {
+        private AppDbContext db;
+
         public Order SelectByStoreNo(string storeNo)
         {
             var sql = "SELECT * FROM orders WHERE store_no = @storeNo";
@@ -12,5 +14,15 @@ namespace Example.Data
         {
             return SelectByStoreNo(storeNo);
         }
+
+        public Order FindWithRawSql(string storeNo)
+        {
+            return db.Orders.FromSqlRaw("SELECT * FROM orders WHERE store_no = {0}", storeNo).FirstOrDefault();
+        }
+    }
+
+    public class AppDbContext
+    {
+        public DbSet<Order> Orders { get; set; }
     }
 }

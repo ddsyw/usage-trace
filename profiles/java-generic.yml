@@ -1,4 +1,5 @@
 profile: java-generic
+source_exts: ['.java']
 detect:
   files: [pom.xml, build.gradle, settings.gradle]
 layers:

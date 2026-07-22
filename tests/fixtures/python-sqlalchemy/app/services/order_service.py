@@ -13,3 +13,12 @@ class OrderService:
 
     def find_by_store_no(self, store_no: str):
         return self.repo.find_orders(store_no)
+
+
+class OrderQueryService:
+    def __init__(self, session):
+        self.session = session
+
+    def list_by_store_no(self, store_no: str):
+        from app.models.order import Order
+        return self.session.query(Order).filter_by(store_no=store_no).all()

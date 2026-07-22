@@ -1,4 +1,5 @@
 profile: java-spring
+source_exts: ['.java']
 detect:
   files: [pom.xml, build.gradle]
 layers:

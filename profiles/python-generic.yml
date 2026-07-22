@@ -1,4 +1,5 @@
 profile: python-generic
+source_exts: ['.py']
 detect:
   files: [pyproject.toml, setup.py, requirements.txt, Pipfile]
 layers:

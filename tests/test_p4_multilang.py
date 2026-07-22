@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from common import load_profile
-from index import ProjectIndex, _SOURCE_EXTS
+from index import ProjectIndex, _SOURCE_EXTS, source_exts_for_profile
 from parsing import CSharpParser, LANGUAGES, PythonParser
 from usage_trace import detect_profile_name, run
 
@@ -104,3 +104,49 @@ def test_detect_profile_prefers_majority_language(tmp_path: Path):
             encoding="utf-8",
         )
     assert detect_profile_name(tmp_path) == "python-sqlalchemy"
+
+
+def test_profile_scopes_source_language(tmp_path: Path):
+    """Python profile must not index sibling Java sources in a monorepo root."""
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "svc.py").write_text(
+        "class S:\n    def find_by_store_no(self, store_no):\n        return store_no\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "java").mkdir()
+    (tmp_path / "java" / "A.java").write_text(
+        "class A { String storeNo; void x(){} }",
+        encoding="utf-8",
+    )
+    profile = load_profile("python-generic", PROFILES)
+    assert source_exts_for_profile(profile) == (".py",)
+    idx = ProjectIndex().build(tmp_path, profile)
+    assert any(p.endswith(".py") for p in idx.files)
+    assert not any(p.endswith(".java") for p in idx.files)
+
+
+def test_sqlalchemy_query_model_and_ef_fromsql():
+    py = run(
+        "store_no",
+        PY_FIX,
+        "python-sqlalchemy",
+        depth=4,
+        max_nodes=100,
+        out=ROOT / ".usage-trace" / "p4-python-query-report.html",
+    )
+    units = {n["id"] for n in py["nodes"] if n["kind"] == "unit"}
+    assert "OrderQueryService.list_by_store_no" in units
+    assert any(n.get("table") == "orders" for n in py["nodes"] if n["kind"] == "table")
+
+    cs = run(
+        "storeNo",
+        CS_FIX,
+        "csharp-ef",
+        depth=4,
+        max_nodes=100,
+        out=ROOT / ".usage-trace" / "p4-csharp-fromsql-report.html",
+    )
+    units = {n["id"] for n in cs["nodes"] if n["kind"] == "unit"}
+    assert "OrderRepository.FindWithRawSql" in units
+    sources = {s.get("source") for s in cs.get("db_statements") or []}
+    assert "ef_core" in sources

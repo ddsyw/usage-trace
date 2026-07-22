@@ -14,6 +14,21 @@ INDEX_VERSION = 4
 _SOURCE_EXTS = tuple(LANGUAGES.keys())
 
 
+def source_exts_for_profile(profile: dict) -> tuple[str, ...]:
+    """Limit indexed languages for monorepos (P4)."""
+    configured = profile.get("source_exts")
+    if configured:
+        return tuple(configured)
+    name = str(profile.get("profile") or "")
+    if name.startswith("python"):
+        return (".py",)
+    if name.startswith("csharp"):
+        return (".cs",)
+    if name.startswith("java"):
+        return (".java",)
+    return _SOURCE_EXTS
+
+
 class ProjectIndex:
     def __init__(self) -> None:
         self.root_hash: str = ""
@@ -35,7 +50,7 @@ class ProjectIndex:
         self.root_hash = _root_hash(root, profile.get("profile", ""))
         layers = profile.get("layers", [])
         exclude = set(profile.get("exclude", {}).get("dirs", []))
-        for path in _walk_sources(root, exclude):
+        for path in _walk_sources(root, exclude, source_exts_for_profile(profile)):
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
             except OSError:
@@ -170,7 +185,7 @@ class ProjectIndex:
                 and cached_manifest.get("version") == INDEX_VERSION:
             cached_files = cached_manifest.get("files", {})
 
-        for path in _walk_sources(root, exclude):
+        for path in _walk_sources(root, exclude, source_exts_for_profile(profile)):
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
                 st = path.stat()
@@ -221,11 +236,13 @@ def _root_hash(root: Path, profile_name: str) -> str:
     return hashlib.sha1(f"{loc}|{profile_name}".encode("utf-8")).hexdigest()[:16]
 
 
-def _walk_sources(root: Path, exclude: set[str]):
+def _walk_sources(root: Path, exclude: set[str],
+                  exts: tuple[str, ...] | None = None):
+    allowed = set(exts if exts is not None else _SOURCE_EXTS)
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in exclude]
         for fn in filenames:
-            if Path(fn).suffix in _SOURCE_EXTS:
+            if Path(fn).suffix in allowed:
                 yield Path(dirpath) / fn
 
 

@@ -543,7 +543,7 @@ _EF_TO_TABLE_RE = re.compile(
 
 
 def _parse_sqlalchemy(root: Path, index) -> list[dict]:
-    """Map SQLAlchemy models to methods that reference the model class."""
+    """Map SQLAlchemy models/queries to methods that reference models."""
     model_tables: dict[str, str] = {}
     file_text: dict[str, str] = {}
     for path in [Path(p) for p in index.files if str(p).endswith(".py")]:
@@ -552,55 +552,77 @@ def _parse_sqlalchemy(root: Path, index) -> list[dict]:
         except OSError:
             continue
         file_text[str(path)] = text
-        # class Order(...): ... __tablename__ = "orders"
         for cls_m in re.finditer(r"class\s+(\w+)\s*[:(]", text):
             cls = cls_m.group(1)
-            window = text[cls_m.start(): cls_m.start() + 800]
+            window = text[cls_m.start(): cls_m.start() + 1200]
             tm = _SQLALCHEMY_TABLENAME_RE.search(window) or _SQLALCHEMY_TABLE_CTOR_RE.search(window)
             if tm:
                 model_tables[cls] = tm.group(1)
-        for tm in _SQLALCHEMY_TABLENAME_RE.finditer(text):
-            # fallback without class window
-            pass
+            elif re.search(r"\b(declarative_base|DeclarativeBase|MappedAsDataclass)\b", window):
+                model_tables.setdefault(cls, cls)
         for tm in _SQLALCHEMY_TABLE_CTOR_RE.finditer(text):
             model_tables.setdefault(tm.group(1), tm.group(1))
 
     if not model_tables:
         return []
 
+    query_model_re = re.compile(
+        r"(?:session\.)?query\s*\(\s*([A-Za-z_]\w*)"
+        r"|\bselect\s*\(\s*([A-Za-z_]\w*)"
+        r"|\bjoin\s*\(\s*([A-Za-z_]\w*)"
+    )
+
     out: list[dict] = []
     for path_s, text in file_text.items():
         path = Path(path_s)
-        tables = []
+        file_tables: list[str] = []
+        mentioned_models: list[str] = []
         for cls, table in model_tables.items():
             if re.search(rf"\b{re.escape(cls)}\b", text):
-                tables.append(table)
-        # also attach tables defined in this file
-        tables.extend(_SQLALCHEMY_TABLENAME_RE.findall(text))
-        tables.extend(_SQLALCHEMY_TABLE_CTOR_RE.findall(text))
-        tables = list(dict.fromkeys(tables))
-        if not tables:
+                file_tables.append(table)
+                mentioned_models.append(cls)
+        for m in query_model_re.finditer(text):
+            cls = next(g for g in m.groups() if g)
+            if cls in model_tables:
+                file_tables.append(model_tables[cls])
+                mentioned_models.append(cls)
+        file_tables.extend(_SQLALCHEMY_TABLENAME_RE.findall(text))
+        file_tables.extend(_SQLALCHEMY_TABLE_CTOR_RE.findall(text))
+        file_tables = list(dict.fromkeys(file_tables))
+        if not file_tables:
             continue
         for meth in (index.methods_by_file or {}).get(path_s, []):
             qual = getattr(meth, "qual", None)
             name = getattr(meth, "name", "")
             if not qual or name in {"__init__", "__repr__", "__str__"}:
                 continue
+            lines = text.splitlines()
+            body = "\n".join(lines[max(meth.start_line - 1, 0): meth.end_line])
+            local_tables: list[str] = []
+            for cls, table in model_tables.items():
+                if re.search(rf"\b{re.escape(cls)}\b", body):
+                    local_tables.append(table)
+            for m in query_model_re.finditer(body):
+                cls = next(g for g in m.groups() if g)
+                if cls in model_tables:
+                    local_tables.append(model_tables[cls])
+            use_tables = list(dict.fromkeys(local_tables or file_tables))
+            models = ",".join(dict.fromkeys(mentioned_models)) or "?"
             out.append({
                 "source": "sqlalchemy",
                 "file": _rel_path(root, path),
                 "qual": qual,
                 "method": name,
                 "op": _op_from_method(name),
-                "tables": tables,
-                "sql": f"SQLAlchemy {qual} -> {', '.join(tables)}",
+                "tables": use_tables,
+                "sql": f"SQLAlchemy {qual} -> {', '.join(use_tables)} ({models})",
                 "statement_id": f"{qual}@sqlalchemy",
             })
     return out
 
 
 def _parse_ef_core(root: Path, index) -> list[dict]:
-    """Map EF Core entity tables to methods that reference the entity type."""
+    """Map EF Core entity tables / raw SQL to methods that reference entities."""
     entity_tables: dict[str, str] = {}
     file_text: dict[str, str] = {}
     for path in [Path(p) for p in index.files if str(p).endswith(".cs")]:
@@ -611,7 +633,6 @@ def _parse_ef_core(root: Path, index) -> list[dict]:
         file_text[str(path)] = text
         for cls_m in re.finditer(r"\b(?:class|record)\s+(\w+)", text):
             cls = cls_m.group(1)
-            # look back a bit for [Table]
             start = max(0, cls_m.start() - 300)
             window = text[start: cls_m.start() + 200]
             tm = _EF_TABLE_ATTR_RE.search(window)
@@ -621,34 +642,68 @@ def _parse_ef_core(root: Path, index) -> list[dict]:
             entity_tables.setdefault(tm.group(1), tm.group(1))
         for m in re.finditer(r"\bDbSet\s*<\s*([\w.]+)\s*>\s+(\w+)", text):
             entity = m.group(1).split(".")[-1]
-            entity_tables.setdefault(entity, m.group(2))
+            # Prefer entity class mapping when known; else DbSet property name
+            entity_tables.setdefault(entity, entity_tables.get(entity, m.group(2)))
 
     if not entity_tables:
         return []
 
+    dbset_access_re = re.compile(r"\.\s*([A-Z][A-Za-z0-9_]*)\b")
+    from_sql_re = re.compile(
+        r'(?:FromSql(?:Raw|Interpolated)?|ExecuteSql(?:Raw|Interpolated)?)\s*\(\s*\$?"([^"]+)"',
+        re.IGNORECASE,
+    )
+
     out: list[dict] = []
+    # reverse map property-ish names
+    prop_to_table = {v: v for v in entity_tables.values()}
+    for ent, table in entity_tables.items():
+        prop_to_table[ent] = table
+
     for path_s, text in file_text.items():
         path = Path(path_s)
-        tables = []
+        file_tables: list[str] = []
         for cls, table in entity_tables.items():
             if re.search(rf"\b{re.escape(cls)}\b", text):
-                tables.append(table)
-        tables = list(dict.fromkeys(tables))
-        if not tables:
-            continue
+                file_tables.append(table)
+        file_tables = list(dict.fromkeys(file_tables))
+        if not file_tables:
+            # still check for raw SQL on methods below
+            pass
         for meth in (index.methods_by_file or {}).get(path_s, []):
             qual = getattr(meth, "qual", None)
             name = getattr(meth, "name", "")
             if not qual:
                 continue
+            lines = text.splitlines()
+            body = "\n".join(lines[max(meth.start_line - 1, 0): meth.end_line])
+            local_tables: list[str] = []
+            for cls, table in entity_tables.items():
+                if re.search(rf"\b{re.escape(cls)}\b", body):
+                    local_tables.append(table)
+            # DbSet property access: context.Orders
+            for m in dbset_access_re.finditer(body):
+                prop = m.group(1)
+                if prop in prop_to_table:
+                    local_tables.append(prop_to_table[prop])
+            sql_snippets: list[str] = []
+            for m in from_sql_re.finditer(body):
+                sql = m.group(1) or ""
+                if sql:
+                    sql_snippets.append(sql)
+                    local_tables.extend(_tables_in_sql(sql))
+            use_tables = list(dict.fromkeys(local_tables or file_tables))
+            if not use_tables:
+                continue
+            sql = sql_snippets[0] if sql_snippets else f"EF Core {qual} -> {', '.join(use_tables)}"
             out.append({
                 "source": "ef_core",
                 "file": _rel_path(root, path),
                 "qual": qual,
                 "method": name,
-                "op": _op_from_method(name),
-                "tables": tables,
-                "sql": f"EF Core {qual} -> {', '.join(tables)}",
+                "op": _op_from_sql(sql) if sql_snippets else _op_from_method(name),
+                "tables": use_tables,
+                "sql": sql,
                 "statement_id": f"{qual}@ef_core",
             })
     return out

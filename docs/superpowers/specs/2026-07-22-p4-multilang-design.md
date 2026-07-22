@@ -1,7 +1,7 @@
 # P4 设计：多语言（Python / C#）
 
 **日期：** 2026-07-22  
-**状态：** ✅ 基础交付  
+**状态：** ✅ 基础交付 + monorepo source 限定 + ORM 加深  
 **所属路线图：** usage-trace 四阶段升级（P1 ✅ → P2 ✅ → P3 ✅ → **P4 多语言** ✅ 基础）
 
 ## 目标
@@ -33,3 +33,10 @@
 - fixture `tests/fixtures/python-sqlalchemy` 对 `store_no` 产出调用链 + `orders` 表
 - fixture `tests/fixtures/csharp-ef` 对 `storeNo` 产出调用链 + `orders` 表
 - `python3 -m pytest` 全绿；依赖含 `tree-sitter-python` / `tree-sitter-c-sharp`
+
+
+## 加深项（已做）
+
+- Profile `source_exts` + `source_exts_for_profile()`：混语仓库只索引当前语言后缀
+- SQLAlchemy：`session.query(Model)` / `select(Model)` 方法级表绑定
+- EF Core：`FromSqlRaw` / `ExecuteSqlRaw` SQL 抽表 + DbSet/实体引用
