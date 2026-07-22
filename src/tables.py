@@ -15,6 +15,21 @@ _TABLE_RE = re.compile(
     re.IGNORECASE,
 )
 _SQL_OP_RE = re.compile(r"^\s*(select|insert|update|delete)\b", re.IGNORECASE)
+# Schema DDL: CREATE/ALTER/DROP TABLE/INDEX/DATABASE/SCHEMA/VIEW. Such files
+# *define* tables rather than query them, so raw_sql must not attribute their
+# tables to methods (every column name would match some method's terms).
+_DDL_RE = re.compile(
+    r"\b(?:create|alter|drop)\s+(?:table|index|database|schema|view)\b",
+    re.IGNORECASE,
+)
+# SQL functions / pseudo-tables the table regex can mistakenly capture, e.g.
+# ``ON UPDATE CURRENT_TIMESTAMP`` (reads as UPDATE CURRENT_TIMESTAMP) or
+# ``SELECT ... FROM dual``.
+_SQL_NON_TABLE_TERMS = {
+    "current_timestamp", "utc_timestamp", "utc_time", "utc_date",
+    "localtimestamp", "localtime", "current_date", "current_time",
+    "now", "sysdate", "dual",
+}
 _JAVA_KEYWORDS = {
     "class", "interface", "public", "private", "protected", "return", "new",
     "null", "true", "false", "void", "object", "string", "long", "int",
@@ -76,6 +91,8 @@ def _tables_in_sql(sql: str) -> list[str]:
     tables: list[str] = []
     for m in _TABLE_RE.finditer(sql):
         table = re.sub(r"\s+", "", m.group(1)).split(".")[-1].strip("`\"'")
+        if table.lower() in _SQL_NON_TABLE_TERMS:
+            continue
         if table not in seen:
             seen.add(table)
             tables.append(table)
@@ -266,14 +283,30 @@ def _unit_terms(unit: dict) -> set[str]:
     return terms
 
 
-def _parse_raw_sql(root: Path, globs: list[str], unit_by_id: dict[str, dict]) -> list[dict]:
+def _parse_raw_sql(root: Path, globs: list[str], unit_by_id: dict[str, dict],
+                   exclude_dirs: list[str] | None = None) -> list[dict]:
     out: list[dict] = []
     units_with_terms = [(uid, _unit_terms(unit)) for uid, unit in unit_by_id.items()]
+    excluded = {d.lower().strip("/") for d in (exclude_dirs or [])}
+    root_resolved = root.resolve()
     for glob in globs:
         for sql_file in Path(root).glob(glob):
+            # Honor the profile's exclude.dirs (target/, build/, ...) so compiled
+            # copies shipped under them aren't scanned.
+            try:
+                rel_parts = sql_file.resolve().relative_to(root_resolved).parts
+            except ValueError:
+                rel_parts = sql_file.parts
+            if any(part.lower() in excluded for part in rel_parts):
+                continue
             try:
                 sql = sql_file.read_text(encoding="utf-8", errors="replace")
             except OSError:
+                continue
+            # A schema DDL file defines tables but is not a method query;
+            # term-overlap attribution against it produces mass false positives
+            # (every column name matches some method term).
+            if _DDL_RE.search(sql):
                 continue
             tables = _tables_in_sql(sql)
             if not tables:
@@ -346,7 +379,8 @@ def resolve_tables(graph: dict, index, profile: dict) -> dict:
     if "jpa" in ts:
         statements += _parse_jpa(root, index)
     if "raw_sql" in ts:
-        statements += _parse_raw_sql(root, ts.get("raw_sql") or [], unit_by_id)
+        exclude_dirs = profile.get("exclude", {}).get("dirs", [])
+        statements += _parse_raw_sql(root, ts.get("raw_sql") or [], unit_by_id, exclude_dirs)
     if "java_sql_literals" in ts:
         statements += _parse_java_sql_literals(root, unit_by_id)
 
