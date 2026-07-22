@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh" data-theme="light" data-persona="senior">
 <head>
+<script>try{if(localStorage.getItem("usage-trace-theme")==="dark"){document.documentElement.dataset.theme="dark";}}catch(_){}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>usage-trace · {{KEYWORD}}</title>
@@ -578,8 +579,9 @@
   }
   function sourceBlock(node){
     if (!node.source) return "";
+    const startLine = Number(node.line) || 1;
     const lines = String(node.source).replace(/^\n+|\n+$/g, "").split("\n");
-    const numbered = lines.map((ln, i) => `${String(i + 1).padStart(3, " ")}  ${ln}`).join("\n");
+    const numbered = lines.map((ln, i) => `${String(startLine + i).padStart(3, " ")}  ${ln}`).join("\n");
     return `<div class="field ni-source"><b>方法源码</b><pre>${esc(numbered)}</pre></div>`;
   }
   function callNeighbors(id, direction){
