@@ -1,6 +1,6 @@
 # AGENTS.md
 
-usage-trace is a Python CLI that traces a keyword's full usage across a Java/Spring codebase and produces a single offline HTML report. It ships as a coding-agent skill plus marketplace plugins for Codex / Claude Code / Cursor (not a Claude Code subagent).
+usage-trace is a Python CLI that traces a keyword's full usage across Java/Spring, Python, or C# codebases and produces a single offline HTML report. It ships as a coding-agent skill plus marketplace plugins for Codex / Claude Code / Cursor (not a Claude Code subagent).
 
 ## Quick start
 
@@ -43,7 +43,7 @@ A single `usage-trace` run orchestrates five phases in order:
 
 ```
 src/                    CLI and analysis phases
-profiles/               Java analysis profiles (java-spring.yml, java-generic.yml)
+profiles/               analysis profiles (java-*, python-*, csharp-*)
 templates/              HTML report template
 tests/                  unit tests, e2e tests, and fixture projects
 skills/                 Skill definition (SKILL.md)

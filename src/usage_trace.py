@@ -40,43 +40,79 @@ def _layer_order(profile: dict) -> list[str]:
     return order + [name for name in ("Table", "Other") if name not in order]
 
 
+def _count_sources(root: Path, suffix: str, limit: int = 500) -> int:
+    n = 0
+    for path in root.rglob(f"*{suffix}"):
+        # skip common junk without loading profile excludes yet
+        parts = set(path.parts)
+        if parts & {"node_modules", ".git", "target", "build", "bin", "obj",
+                    ".venv", "venv", "__pycache__", "dist"}:
+            continue
+        n += 1
+        if n >= limit:
+            break
+    return n
+
+
+def _java_profile(root: Path) -> str:
+    for java in list(root.rglob("*.java"))[:80]:
+        try:
+            text = java.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if "org.springframework" in text or "@RestController" in text or "@Service" in text:
+            return "java-spring"
+    return "java-generic"
+
+
+def _python_profile(root: Path) -> str:
+    for py in list(root.rglob("*.py"))[:80]:
+        try:
+            text = py.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        low = text.lower()
+        if "sqlalchemy" in low or "flask_sqlalchemy" in low:
+            return "python-sqlalchemy"
+    return "python-generic"
+
+
+def _csharp_profile(root: Path) -> str:
+    for cs in list(root.rglob("*.cs"))[:80]:
+        try:
+            text = cs.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if "Microsoft.EntityFrameworkCore" in text or "DbContext" in text or "[Table(" in text:
+            return "csharp-ef"
+    return "csharp-generic"
+
+
 def detect_profile_name(root: Path | str) -> str:
+    """Pick analysis profile. Mixed repos prefer the language with the most sources."""
     root = Path(root)
     java_markers = ("pom.xml", "build.gradle", "settings.gradle")
-    if any((root / marker).exists() for marker in java_markers) or any(root.rglob("*.java")):
-        for java in root.rglob("*.java"):
-            try:
-                text = java.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            if "org.springframework" in text or "@RestController" in text or "@Service" in text:
-                return "java-spring"
-        return "java-generic"
-
     py_markers = ("pyproject.toml", "setup.py", "requirements.txt", "Pipfile")
-    if any((root / marker).exists() for marker in py_markers) or any(root.rglob("*.py")):
-        for py in list(root.rglob("*.py"))[:80]:
-            try:
-                text = py.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            low = text.lower()
-            if "sqlalchemy" in low or "flask_sqlalchemy" in low:
-                return "python-sqlalchemy"
-        return "python-generic"
+    has_java = any((root / m).exists() for m in java_markers) or any(root.rglob("*.java"))
+    has_py = any((root / m).exists() for m in py_markers) or any(root.rglob("*.py"))
+    has_cs = bool(list(root.glob("*.csproj")) + list(root.glob("*.sln"))) or any(root.rglob("*.cs"))
 
-    cs_markers = list(root.glob("*.csproj")) + list(root.glob("*.sln"))
-    if cs_markers or any(root.rglob("*.cs")):
-        for cs in list(root.rglob("*.cs"))[:80]:
-            try:
-                text = cs.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            if "Microsoft.EntityFrameworkCore" in text or "DbContext" in text or "[Table(" in text:
-                return "csharp-ef"
-        return "csharp-generic"
+    candidates: list[tuple[int, int, str]] = []
+    # rank key: (source_count, marker_bonus)
+    if has_java:
+        bonus = 1 if any((root / m).exists() for m in java_markers) else 0
+        candidates.append((_count_sources(root, ".java"), bonus, _java_profile(root)))
+    if has_py:
+        bonus = 1 if any((root / m).exists() for m in py_markers) else 0
+        candidates.append((_count_sources(root, ".py"), bonus, _python_profile(root)))
+    if has_cs:
+        bonus = 1 if list(root.glob("*.csproj")) or list(root.glob("*.sln")) else 0
+        candidates.append((_count_sources(root, ".cs"), bonus, _csharp_profile(root)))
 
-    return "java-generic"
+    if not candidates:
+        return "java-generic"
+    candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    return candidates[0][2]
 
 
 def run(keyword: str, root: Path | str, profile_name: str = "auto",

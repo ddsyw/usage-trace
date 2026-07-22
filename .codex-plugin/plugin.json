@@ -1,7 +1,7 @@
 {
   "name": "usage-trace",
-  "version": "0.1.0+codex.20260722164500",
-  "description": "Trace Java field usage, call chains, and database tables with an offline HTML report. Supports Chinese queries: 查找字段使用情况, 追踪调用链, 字段流向.",
+  "version": "0.1.0+codex.20260722210000",
+  "description": "Trace keyword usage, call chains, and database tables in Java/Spring, Python, or C# with an offline HTML report. Supports Chinese queries: 查找字段使用情况, 追踪调用链, 字段流向.",
   "author": {
     "name": "ddsyw",
     "url": "https://github.com/ddsyw"
@@ -21,8 +21,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "usage-trace",
-    "shortDescription": "Trace Java field usage, call chains, and database tables (查找字段使用情况、调用链追踪).",
-    "longDescription": "Analyze a Java/Spring or plain Java project for a keyword such as orderId, then generate a single offline HTML report with usage sites, call chain, and database table access. 支持中文查询：查找字段使用情况、追踪调用链、字段流向分析。",
+    "shortDescription": "Trace field usage, call chains, and DB tables (查找字段使用情况、调用链追踪).",
+    "longDescription": "Analyze a Java/Spring, Python (SQLAlchemy), or C# (EF Core) project for a keyword such as orderId or store_no, then generate a single offline HTML report with usage sites, call chain, and database table access. 支持中文查询：查找字段使用情况、追踪调用链、字段流向分析。",
     "developerName": "ddsyw",
     "category": "Productivity",
     "capabilities": [
@@ -35,7 +35,9 @@
       "Analyze storeNo usage in the current Java project.",
       "Trace a Java field and summarize touched database tables.",
       "查找 orderId 字段项目使用情况",
-      "追踪 storeNo 的调用链和涉及的数据库表"
+      "追踪 storeNo 的调用链和涉及的数据库表",
+      "Analyze store_no usage in this Python SQLAlchemy project.",
+      "Trace storeNo in this C# EF Core project and list tables."
     ],
     "brandColor": "#2563EB"
   }

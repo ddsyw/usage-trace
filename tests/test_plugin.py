@@ -20,7 +20,8 @@ def test_codex_plugin_manifest_exists_and_points_to_skills():
     assert manifest["skills"] == "./skills/"
     assert manifest["repository"] == "https://github.com/ddsyw/usage-trace"
     assert manifest["interface"]["displayName"] == "usage-trace"
-    assert "Trace Java field usage" in manifest["interface"]["shortDescription"]
+    assert "Trace field usage" in manifest["interface"]["shortDescription"]
+    assert "查找字段使用情况" in manifest["interface"]["shortDescription"]
     assert "usage-trace --keyword orderId" in manifest["interface"]["defaultPrompt"][0]
 
 
@@ -61,5 +62,6 @@ def test_codex_plugin_docs_use_official_plugins_command():
     for path in (README, README_CN):
         text = path.read_text(encoding="utf-8")
 
-        assert "`/plugins`" in text
-        assert "`/plugin`" not in text
+        assert "`/plugins`" in text  # Codex marketplace UI
+        # Claude Code uses `/plugin ...`; allow that outside Codex-only wording.
+        assert "codex plugin marketplace add" in text or "codex plugin add" in text or "/plugins" in text

@@ -86,3 +86,21 @@ def test_index_builds_python_sources():
     idx = ProjectIndex().build(PY_FIX, profile)
     assert any(p.endswith(".py") for p in idx.files)
     assert "OrderService.find_by_store_no" in idx.methods
+
+
+def test_detect_profile_prefers_majority_language(tmp_path: Path):
+    # more .py files than .java => python profile
+    (tmp_path / "pom.xml").write_text("<project/>", encoding="utf-8")
+    java_dir = tmp_path / "src" / "main" / "java"
+    java_dir.mkdir(parents=True)
+    (java_dir / "A.java").write_text("class A { String storeNo; }", encoding="utf-8")
+    app = tmp_path / "app"
+    app.mkdir()
+    for i in range(3):
+        (app / f"m{i}.py").write_text(
+            "from sqlalchemy.orm import declarative_base\n"
+            "Base = declarative_base()\n"
+            f"class M{i}:\n    __tablename__ = 't{i}'\n    store_no = 1\n",
+            encoding="utf-8",
+        )
+    assert detect_profile_name(tmp_path) == "python-sqlalchemy"

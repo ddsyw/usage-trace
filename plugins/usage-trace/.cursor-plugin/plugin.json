@@ -1,7 +1,7 @@
 {
   "name": "usage-trace",
-  "version": "0.1.0+codex.20260722164500",
-  "description": "Trace Java field usage, call chains, and database tables with an offline HTML report. Supports Chinese queries: 查找字段使用情况, 追踪调用链, 字段流向.",
+  "version": "0.1.0+codex.20260722210000",
+  "description": "Trace keyword usage, call chains, and database tables in Java/Spring, Python, or C# with an offline HTML report. Supports Chinese queries: 查找字段使用情况, 追踪调用链, 字段流向.",
   "author": {
     "name": "ddsyw",
     "url": "https://github.com/ddsyw"
