@@ -52,6 +52,30 @@ def detect_profile_name(root: Path | str) -> str:
             if "org.springframework" in text or "@RestController" in text or "@Service" in text:
                 return "java-spring"
         return "java-generic"
+
+    py_markers = ("pyproject.toml", "setup.py", "requirements.txt", "Pipfile")
+    if any((root / marker).exists() for marker in py_markers) or any(root.rglob("*.py")):
+        for py in list(root.rglob("*.py"))[:80]:
+            try:
+                text = py.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            low = text.lower()
+            if "sqlalchemy" in low or "flask_sqlalchemy" in low:
+                return "python-sqlalchemy"
+        return "python-generic"
+
+    cs_markers = list(root.glob("*.csproj")) + list(root.glob("*.sln"))
+    if cs_markers or any(root.rglob("*.cs")):
+        for cs in list(root.rglob("*.cs"))[:80]:
+            try:
+                text = cs.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if "Microsoft.EntityFrameworkCore" in text or "DbContext" in text or "[Table(" in text:
+                return "csharp-ef"
+        return "csharp-generic"
+
     return "java-generic"
 
 

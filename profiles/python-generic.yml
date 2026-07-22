@@ -1,0 +1,16 @@
+profile: python-generic
+detect:
+  files: [pyproject.toml, setup.py, requirements.txt, Pipfile]
+layers:
+  - {name: Controller, path_hint: "(api|router|views|handlers|controller|controllers)"}
+  - {name: Service, path_hint: "(service|services|logic|domain|usecase)"}
+  - {name: Repository, path_hint: "(repository|repositories|repo|dao|models|persistence)"}
+table_sources:
+  sqlalchemy: true
+  raw_sql: ["**/*.sql"]
+  python_sql_literals: true
+call_patterns:
+  method_invocation: '\b([A-Za-z_][\w]*)\s*\('
+  chain_step: '\.\s*([A-Za-z_]\w*)\s*\('
+exclude:
+  dirs: [__pycache__, .venv, venv, .git, dist, build, .tox, node_modules, .mypy_cache, .pytest_cache]

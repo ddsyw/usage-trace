@@ -194,7 +194,7 @@ A: 在助手使用的同一环境执行 `python3 -m pip install -e /path/to/usag
 A: Java 项目根目录，一般含 `pom.xml`、`build.gradle` 或 `src/main/java`。
 
 **Q: 非 Java 项目？**  
-A: 当前仅支持 Java（`java-spring` / `java-generic`）。多语言在路线图 P4。
+A: 支持 Java（`java-spring` / `java-generic`）、Python（`python-sqlalchemy` / `python-generic`）、C#（`csharp-ef` / `csharp-generic`）。`--profile auto` 会按项目标记自动选择。
 
 ---
 

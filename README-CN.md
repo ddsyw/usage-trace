@@ -231,6 +231,13 @@ bash scripts/install-skill.sh cursor-user
 - 非 Java 语言：
   - 暂不支持完整调用链追踪
 
+- Python（SQLAlchemy / generic）：
+  - 关键字使用与调用链（tree-sitter-python）
+  - `__tablename__` / `Table()` 与 SQL 字符串表提示
+- C#（EF Core / generic）：
+  - 关键字使用与调用链（tree-sitter-c-sharp）
+  - `[Table]` / `ToTable` / `DbSet` 与 SQL 字符串表提示
+
 ## 调试流水线
 
 单条 `usage-trace` 命令内部会编排以下阶段：

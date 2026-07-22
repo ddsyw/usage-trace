@@ -8,10 +8,10 @@ import shutil
 from pathlib import Path
 
 from common import classify_layer
-from parsing import FileSymbols, parser_for
+from parsing import FileSymbols, LANGUAGES, parser_for
 
-INDEX_VERSION = 3
-_SOURCE_EXTS = (".java",)  # P1; P4 adds .cs/.py via LANGUAGES
+INDEX_VERSION = 4
+_SOURCE_EXTS = tuple(LANGUAGES.keys())
 
 
 class ProjectIndex:

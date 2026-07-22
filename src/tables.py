@@ -527,6 +527,162 @@ def _parse_mybatis_plus_calls(graph: dict, index, root: Path) -> list[dict]:
     return out
 
 
+
+_SQLALCHEMY_TABLENAME_RE = re.compile(
+    r"""__tablename__\s*=\s*['"]([^'"]+)['"]""",
+)
+_SQLALCHEMY_TABLE_CTOR_RE = re.compile(
+    r"""\bTable\s*\(\s*['"]([^'"]+)['"]""",
+)
+_EF_TABLE_ATTR_RE = re.compile(
+    r"""\[\s*Table\s*\(\s*(?:name\s*:\s*)?["']([^"']+)["']""",
+)
+_EF_TO_TABLE_RE = re.compile(
+    r"""\.ToTable\s*\(\s*["']([^"']+)["']""",
+)
+
+
+def _parse_sqlalchemy(root: Path, index) -> list[dict]:
+    """Map SQLAlchemy models to methods that reference the model class."""
+    model_tables: dict[str, str] = {}
+    file_text: dict[str, str] = {}
+    for path in [Path(p) for p in index.files if str(p).endswith(".py")]:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        file_text[str(path)] = text
+        # class Order(...): ... __tablename__ = "orders"
+        for cls_m in re.finditer(r"class\s+(\w+)\s*[:(]", text):
+            cls = cls_m.group(1)
+            window = text[cls_m.start(): cls_m.start() + 800]
+            tm = _SQLALCHEMY_TABLENAME_RE.search(window) or _SQLALCHEMY_TABLE_CTOR_RE.search(window)
+            if tm:
+                model_tables[cls] = tm.group(1)
+        for tm in _SQLALCHEMY_TABLENAME_RE.finditer(text):
+            # fallback without class window
+            pass
+        for tm in _SQLALCHEMY_TABLE_CTOR_RE.finditer(text):
+            model_tables.setdefault(tm.group(1), tm.group(1))
+
+    if not model_tables:
+        return []
+
+    out: list[dict] = []
+    for path_s, text in file_text.items():
+        path = Path(path_s)
+        tables = []
+        for cls, table in model_tables.items():
+            if re.search(rf"\b{re.escape(cls)}\b", text):
+                tables.append(table)
+        # also attach tables defined in this file
+        tables.extend(_SQLALCHEMY_TABLENAME_RE.findall(text))
+        tables.extend(_SQLALCHEMY_TABLE_CTOR_RE.findall(text))
+        tables = list(dict.fromkeys(tables))
+        if not tables:
+            continue
+        for meth in (index.methods_by_file or {}).get(path_s, []):
+            qual = getattr(meth, "qual", None)
+            name = getattr(meth, "name", "")
+            if not qual or name in {"__init__", "__repr__", "__str__"}:
+                continue
+            out.append({
+                "source": "sqlalchemy",
+                "file": _rel_path(root, path),
+                "qual": qual,
+                "method": name,
+                "op": _op_from_method(name),
+                "tables": tables,
+                "sql": f"SQLAlchemy {qual} -> {', '.join(tables)}",
+                "statement_id": f"{qual}@sqlalchemy",
+            })
+    return out
+
+
+def _parse_ef_core(root: Path, index) -> list[dict]:
+    """Map EF Core entity tables to methods that reference the entity type."""
+    entity_tables: dict[str, str] = {}
+    file_text: dict[str, str] = {}
+    for path in [Path(p) for p in index.files if str(p).endswith(".cs")]:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        file_text[str(path)] = text
+        for cls_m in re.finditer(r"\b(?:class|record)\s+(\w+)", text):
+            cls = cls_m.group(1)
+            # look back a bit for [Table]
+            start = max(0, cls_m.start() - 300)
+            window = text[start: cls_m.start() + 200]
+            tm = _EF_TABLE_ATTR_RE.search(window)
+            if tm:
+                entity_tables[cls] = tm.group(1)
+        for tm in _EF_TO_TABLE_RE.finditer(text):
+            entity_tables.setdefault(tm.group(1), tm.group(1))
+        for m in re.finditer(r"\bDbSet\s*<\s*([\w.]+)\s*>\s+(\w+)", text):
+            entity = m.group(1).split(".")[-1]
+            entity_tables.setdefault(entity, m.group(2))
+
+    if not entity_tables:
+        return []
+
+    out: list[dict] = []
+    for path_s, text in file_text.items():
+        path = Path(path_s)
+        tables = []
+        for cls, table in entity_tables.items():
+            if re.search(rf"\b{re.escape(cls)}\b", text):
+                tables.append(table)
+        tables = list(dict.fromkeys(tables))
+        if not tables:
+            continue
+        for meth in (index.methods_by_file or {}).get(path_s, []):
+            qual = getattr(meth, "qual", None)
+            name = getattr(meth, "name", "")
+            if not qual:
+                continue
+            out.append({
+                "source": "ef_core",
+                "file": _rel_path(root, path),
+                "qual": qual,
+                "method": name,
+                "op": _op_from_method(name),
+                "tables": tables,
+                "sql": f"EF Core {qual} -> {', '.join(tables)}",
+                "statement_id": f"{qual}@ef_core",
+            })
+    return out
+
+
+def _parse_source_sql_literals(root: Path, unit_by_id: dict[str, dict], source: str,
+                               suffixes: tuple[str, ...]) -> list[dict]:
+    """Extract SQL string literals from traced units in matching source files."""
+    out: list[dict] = []
+    for uid, unit in unit_by_id.items():
+        file = unit.get("file")
+        if not file or not str(file).endswith(suffixes):
+            continue
+        try:
+            lines = Path(file).read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        start = max(int(unit.get("line") or 1) - 1, 0)
+        end = int(unit.get("end_line") or len(lines))
+        body = "\n".join(lines[start:end])
+        for sql in _java_string_literals(body):
+            tables = _tables_in_sql(sql)
+            if tables:
+                out.append({
+                    "source": source,
+                    "file": _rel_path(root, Path(file)),
+                    "qual": uid,
+                    "op": _op_from_sql(sql),
+                    "tables": tables,
+                    "sql": sql,
+                })
+    return out
+
+
 def resolve_tables(graph: dict, index, profile: dict) -> dict:
     root = Path(index.root) if getattr(index, "root", None) else _root_from_index(index)
     ts = profile.get("table_sources", {})
@@ -544,6 +700,18 @@ def resolve_tables(graph: dict, index, profile: dict) -> dict:
         statements += _parse_raw_sql(root, ts.get("raw_sql") or [], unit_by_id, exclude_dirs)
     if "java_sql_literals" in ts:
         statements += _parse_java_sql_literals(root, unit_by_id)
+    if "python_sql_literals" in ts:
+        statements += _parse_source_sql_literals(
+            root, unit_by_id, "python_sql_literal", (".py",)
+        )
+    if "csharp_sql_literals" in ts:
+        statements += _parse_source_sql_literals(
+            root, unit_by_id, "csharp_sql_literal", (".cs",)
+        )
+    if "sqlalchemy" in ts:
+        statements += _parse_sqlalchemy(root, index)
+    if "ef_core" in ts:
+        statements += _parse_ef_core(root, index)
     # MyBatis-Plus BaseMapper CRUD on traced units (independent of profile keys:
     # tables come from @TableName + extends BaseMapper<Entity>).
     statements += _parse_mybatis_plus_calls(graph, index, root)

@@ -300,3 +300,10 @@ tests/                             Unit, integration, and fixture tests
 - Non-Java projects are not supported for full tracing yet.
 - Very large projects may need a lower `--max-nodes` value or narrower keyword
   variants to keep reports readable.
+
+- Python (SQLAlchemy / generic):
+  - keyword usage + call-chain tracing (tree-sitter-python)
+  - `__tablename__` / `Table()` and SQL string table hints
+- C# (EF Core / generic):
+  - keyword usage + call-chain tracing (tree-sitter-c-sharp)
+  - `[Table]` / `ToTable` / `DbSet` and SQL string table hints

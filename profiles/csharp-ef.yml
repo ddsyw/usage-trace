@@ -1,0 +1,16 @@
+profile: csharp-ef
+detect:
+  files: ["*.csproj", "*.sln"]
+layers:
+  - {name: Controller, path_hint: "(controller|controllers|api|web)", match: "\\[ApiController\\]|ControllerBase"}
+  - {name: Service, path_hint: "(service|services|logic|domain|application)"}
+  - {name: Repository, path_hint: "(repository|repositories|dao|data|persistence|infra)", match: "DbContext|DbSet"}
+table_sources:
+  ef_core: true
+  raw_sql: ["**/*.sql"]
+  csharp_sql_literals: true
+call_patterns:
+  method_invocation: '\b([A-Za-z_][\w]*)\s*\('
+  chain_step: '\.\s*([A-Za-z_]\w*)\s*\('
+exclude:
+  dirs: [bin, obj, .git, packages, node_modules, .vs]
