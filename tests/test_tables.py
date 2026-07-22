@@ -374,6 +374,79 @@ public class OrderDao {
     assert table_nodes[0]["table"] == "t_order"
 
 
+def test_raw_sql_skips_schema_ddl_files(tmp_path, profiles_dir):
+    """A schema DDL file (CREATE TABLE ...) is a table *definition*, not a
+    method query. It must not drive method->table attribution: every column
+    name in it (store_no, entry_name, ...) would otherwise match some unit's
+    terms and attribute the defined table (+ SQL functions caught by the
+    table regex, e.g. CURRENT_TIMESTAMP via ON UPDATE CURRENT_TIMESTAMP) to
+    unrelated methods. Regression for the common-entry-service StoreNo run.
+    """
+    sql_dir = tmp_path / "sql"
+    sql_dir.mkdir()
+    (sql_dir / "schema.sql").write_text(
+        "CREATE TABLE `t_common_entry` (\n"
+        "  `id` int NOT NULL,\n"
+        "  `store_no` varchar(32),\n"
+        "  `entry_name` varchar(64),\n"
+        "  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP "
+        "ON UPDATE CURRENT_TIMESTAMP\n"
+        ");\n",
+        encoding="utf-8",
+    )
+    profile = load_profile("java-spring", profiles_dir)
+    g = new_graph({})
+    add_node(g, {
+        "id": "EntryService.getByStoreNo",
+        "kind": "unit",
+        "label": "EntryService.getByStoreNo",
+        "layer": "Service",
+    })
+    idx = _build_index(tmp_path, profile)
+
+    resolve_tables(g, idx, profile)
+
+    table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
+    assert table_nodes == [], f"DDL file leaked table nodes: {[n['table'] for n in table_nodes]}"
+    assert "CURRENT_TIMESTAMP" not in {n.get("table") for n in table_nodes}
+
+
+def test_raw_sql_skips_compiled_target_dir(tmp_path, profiles_dir):
+    """raw_sql must honor the profile's exclude.dirs (e.g. target/, build/) so
+    a schema shipped under target/classes isn't scanned."""
+    compiled = tmp_path / "target" / "classes" / "sql"
+    compiled.mkdir(parents=True)
+    (compiled / "orders_by_store.sql").write_text(
+        "SELECT * FROM t_order WHERE store_no = :storeNo;\n",
+        encoding="utf-8",
+    )
+    profile = load_profile("java-spring", profiles_dir)
+    g = new_graph({})
+    add_node(g, {
+        "id": "OrderService.findByStoreNo",
+        "kind": "unit",
+        "label": "OrderService.findByStoreNo",
+        "layer": "Service",
+    })
+    idx = _build_index(tmp_path, profile)
+
+    resolve_tables(g, idx, profile)
+
+    table_nodes = [n for n in g["nodes"] if n["kind"] == "table"]
+    assert table_nodes == [], f"excluded target/ file was scanned: {[n['table'] for n in table_nodes]}"
+
+
+def test_tables_in_sql_excludes_sql_function_pseudo_tables():
+    from tables import _tables_in_sql
+    # FROM dual / UPDATE ... CURRENT_TIMESTAMP must not yield pseudo table names
+    assert "dual" not in _tables_in_sql("SELECT 1 FROM dual")
+    assert "current_timestamp" not in _tables_in_sql(
+        "UPDATE t SET x = 1 WHERE y ON UPDATE CURRENT_TIMESTAMP"
+    )
+    # real table names still captured
+    assert _tables_in_sql("SELECT * FROM t_order JOIN t_store ON 1=1") == ["t_order", "t_store"]
+
+
 def test_unescape_handles_escape_ordering_correctly():
     # chr(92) is backslash; construct inputs unambiguously.
     # backslash + n (2 chars) -> real newline

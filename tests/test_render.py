@@ -169,3 +169,127 @@ def test_panorama_present_and_renderable():
 
 def test_template_file_exists():
     assert TMPL.exists()
+
+
+def test_method_source_slices_body():
+    from render import _method_source
+
+    node = {"file": __file__, "line": 1, "end_line": 3}
+    src = _method_source(node)
+    assert isinstance(src, str) and src  # non-empty
+
+
+def test_method_source_handles_missing_fields():
+    from render import _method_source
+
+    assert _method_source({}) == ""
+    assert _method_source({"file": "/nope.py", "line": 1, "end_line": 2}) == ""
+
+
+def test_p2_markers_render(fixture_root, profiles_dir):
+    from index import ProjectIndex
+    from trace import trace
+    from discover import discover
+    from common import load_profile
+
+    profile = load_profile("java-spring", profiles_dir)
+    idx = ProjectIndex()
+    idx.build(fixture_root, profile)
+    g = trace(discover("storeNo", profile, None, idx), idx, profile, 4)
+    tmpl = fixture_root.parent.parent.parent / "templates" / "report.html.tmpl"
+    html = render(g, "storeNo",
+                  {"project": "x", "language": "java-spring", "generated_at": ""}, tmpl)
+    for marker in ['id="theme-toggle"', 'id="persona-group"', "legend", "data-theme"]:
+        assert marker in html, marker
+
+
+def _extract_graph_payload(html):
+    """Parse the embedded <script id="graph-data"> JSON the template emits.
+
+    render.py embeds the payload with &, <, > escaped as \\u0026/\\u003c/\\u003e,
+    which are valid JSON escapes, so json.loads handles them directly.
+    """
+    m = re.search(r'<script id="graph-data" type="application/json">(.*?)</script>', html, re.S)
+    assert m, "graph-data script tag not found"
+    return json.loads(m.group(1))
+
+
+def test_payload_unit_nodes_carry_source(fixture_root, profiles_dir):
+    from index import ProjectIndex
+    from trace import trace
+    from discover import discover
+    from common import load_profile
+
+    profile = load_profile("java-spring", profiles_dir)
+    idx = ProjectIndex()
+    idx.build(fixture_root, profile)
+    g = trace(discover("storeNo", profile, None, idx), idx, profile, 4)
+    tmpl = fixture_root.parent.parent.parent / "templates" / "report.html.tmpl"
+    html = render(g, "storeNo",
+                  {"project": "x", "language": "java-spring", "generated_at": ""}, tmpl)
+    payload = _extract_graph_payload(html)
+
+    unit_nodes = [n for n in payload["nodes"] if n.get("kind") == "unit"]
+    assert unit_nodes, "expected at least one unit node"
+
+    # Every unit node should carry a non-empty string `source`.
+    for node in unit_nodes:
+        assert isinstance(node.get("source"), str) and node["source"], (
+            f"unit node {node.get('label')!r} missing non-empty source"
+        )
+
+    # Specific assertion: OrderService.findByStoreNo's source body calls
+    # orderMapper.selectByStoreNo(...). This pins the source field to real
+    # method-body content (not just any string that happens to match).
+    target = next(
+        (n for n in unit_nodes if n.get("label") == "OrderService.findByStoreNo"),
+        None,
+    )
+    assert target is not None, "OrderService.findByStoreNo unit node not found"
+    assert "selectByStoreNo" in target["source"], "selectByStoreNo call missing from source"
+
+
+def test_payload_unit_nodes_enriched_via_full_pipeline(fixture_root, profiles_dir):
+    """Full pipeline: trace() -> prune_and_layout() (runs apply_understand_rules).
+
+    Asserts the enrichment fields (summary/tags/complexity) land on unit nodes
+    and survive JSON serialization into the embedded payload. A regression that
+    breaks apply_understand_rules enrichment will fail here.
+    """
+    from index import ProjectIndex
+    from trace import trace
+    from discover import discover
+    from common import load_profile
+    from graph import prune_and_layout
+
+    profile = load_profile("java-spring", profiles_dir)
+    idx = ProjectIndex()
+    idx.build(fixture_root, profile)
+    g = trace(discover("storeNo", profile, None, idx), idx, profile, 4)
+    g = prune_and_layout(g, 300, None)
+
+    tmpl = fixture_root.parent.parent.parent / "templates" / "report.html.tmpl"
+    html = render(g, "storeNo",
+                  {"project": "x", "language": "java-spring", "generated_at": ""}, tmpl)
+    payload = _extract_graph_payload(html)
+
+    unit_nodes = [n for n in payload["nodes"] if n.get("kind") == "unit"]
+    assert unit_nodes, "expected at least one unit node"
+
+    enriched = [
+        n for n in unit_nodes
+        if isinstance(n.get("summary"), str) and n["summary"]
+        and isinstance(n.get("tags"), list) and n["tags"]
+        and isinstance(n.get("complexity"), str) and n["complexity"]
+        and isinstance(n.get("source"), str) and n["source"]
+    ]
+    assert enriched, (
+        "expected at least one unit node with non-empty "
+        "summary/tags/complexity/source; got: "
+        + ", ".join(
+            f"{n.get('label')}(summary={bool(n.get('summary'))},"
+            f"tags={len(n.get('tags') or [])},"
+            f"complexity={n.get('complexity')!r})"
+            for n in unit_nodes
+        )
+    )
