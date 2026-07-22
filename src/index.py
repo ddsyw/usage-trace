@@ -10,7 +10,7 @@ from pathlib import Path
 from common import classify_layer
 from parsing import FileSymbols, parser_for
 
-INDEX_VERSION = 1
+INDEX_VERSION = 3
 _SOURCE_EXTS = (".java",)  # P1; P4 adds .cs/.py via LANGUAGES
 
 
@@ -89,18 +89,57 @@ class ProjectIndex:
         types.update(m.params)
         return types
 
+    def _ancestor_classes(self, cls: str | None) -> list[str]:
+        """Return cls plus ancestors (BFS), simple names only."""
+        if not cls:
+            return []
+        out: list[str] = []
+        seen: set[str] = set()
+        queue = [cls]
+        while queue:
+            cur = queue.pop(0)
+            if not cur or cur in seen:
+                continue
+            seen.add(cur)
+            out.append(cur)
+            for parent in self.inheritance.get(cur, []):
+                # strip package / generics: com.foo.Base / List<X> -> Base / List
+                simple = parent.split(".")[-1].split("<", 1)[0].strip()
+                if simple and simple not in seen:
+                    queue.append(simple)
+        return out
+
     def resolve_callee_targets(self, caller_qual: str, callee_name: str, receiver: str | None) -> list[str]:
         candidates = self.methods_by_name.get(callee_name, [])
         if not candidates:
             return []
-        if receiver:
-            rtype = self.symbol_types(caller_qual).get(receiver)
-            # Unknown receiver type: return [] instead of fanning out to every
-            # class with that method name (intentional precision improvement).
-            return [q for q in candidates if _class_of(q) == rtype] if rtype else []
         caller = self.methods.get(caller_qual)
         caller_cls = caller.cls if caller else None
-        return [q for q in candidates if _class_of(q) == caller_cls]
+
+        def in_classes(classes: list[str]) -> list[str]:
+            allowed = set(classes)
+            return [q for q in candidates if _class_of(q) in allowed]
+
+        if receiver in (None, "this"):
+            # Unqualified / this.m(): same class, then ancestors (inherited methods).
+            return in_classes(self._ancestor_classes(caller_cls))
+        if receiver == "super":
+            ancestors = self._ancestor_classes(caller_cls)
+            return in_classes(ancestors[1:] if ancestors else [])
+
+        types = self.symbol_types(caller_qual)
+        rtype = types.get(receiver)
+        if rtype:
+            # field / param typed receiver — match declaring type (simple name).
+            simple = rtype.split(".")[-1].split("<", 1)[0].strip()
+            return in_classes(self._ancestor_classes(simple) or [simple])
+
+        # Receiver looks like a type/class name (static or ClassName.method).
+        # Prefer exact class match; avoid fan-out when unknown.
+        class_hits = [q for q in candidates if _class_of(q) == receiver]
+        if class_hits:
+            return class_hits
+        return []
 
     @classmethod
     def load_or_build(cls, root: Path, profile: dict, cache_dir: Path | None = None) -> "ProjectIndex":

@@ -75,7 +75,8 @@ def test_index_invalidates_changed_file(tmp_path, fixture_root, profiles_dir):
 def test_index_manifest_has_version_and_root_hash(tmp_path, fixture_root, profiles_dir):
     profile, idx = _build_cached(fixture_root, profiles_dir, tmp_path)
     manifest = json.loads((tmp_path / "manifest.json").read_text())
-    assert manifest["version"] == 1
+    from index import INDEX_VERSION
+    assert manifest["version"] == INDEX_VERSION
     assert manifest["root_hash"] == idx.root_hash
 
 
@@ -107,3 +108,32 @@ def test_index_invalidates_blobs_on_version_mismatch(tmp_path, fixture_root, pro
     # _save skips the still-existing poisoned blob, so idx3 picks it up.
     idx3 = ProjectIndex.load_or_build(fixture_root, profile, cache_dir=tmp_path)
     assert "Poisoned.poisoned" not in idx3.methods
+
+
+def test_resolve_inherited_and_this_field(tmp_path, profiles_dir):
+    profile = load_profile("java-spring", profiles_dir)
+    (tmp_path / "Base.java").write_text(
+        "public class Base { void run(String storeNo) {} }\n", encoding="utf-8")
+    (tmp_path / "Child.java").write_text(
+        "public class Child extends Base {\n"
+        "  private Helper helper;\n"
+        "  void entry(String storeNo) { run(storeNo); super.run(storeNo); this.helper.go(storeNo); }\n"
+        "}\n"
+        "class Helper { void go(String storeNo) {} }\n",
+        encoding="utf-8")
+    idx = ProjectIndex()
+    idx.build(tmp_path, profile)
+    assert idx.resolve_callee_targets("Child.entry", "run", None) == ["Base.run"]
+    assert idx.resolve_callee_targets("Child.entry", "run", "super") == ["Base.run"]
+    assert idx.resolve_callee_targets("Child.entry", "go", "helper") == ["Helper.go"]
+
+
+def test_resolve_static_class_name(tmp_path, profiles_dir):
+    profile = load_profile("java-spring", profiles_dir)
+    (tmp_path / "U.java").write_text(
+        "public class U { void entry(String storeNo) { Util.fmt(storeNo); } }\n"
+        "class Util { static String fmt(String storeNo) { return storeNo; } }\n",
+        encoding="utf-8")
+    idx = ProjectIndex()
+    idx.build(tmp_path, profile)
+    assert idx.resolve_callee_targets("U.entry", "fmt", "Util") == ["Util.fmt"]

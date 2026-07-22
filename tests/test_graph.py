@@ -82,3 +82,39 @@ def test_no_truncation_under_cap():
     prune_and_layout(g, max_nodes=300)
     assert g["meta"].get("truncated") is None
     assert len(g["nodes"]) == 50
+
+
+
+def test_layout_groups_by_class_within_layer():
+    g = new_graph({})
+    for cls, methods in [
+        ("AController", ["m1", "m2"]),
+        ("CController", ["m1", "m2", "m3"]),
+        ("BController", ["m1"]),
+    ]:
+        for m in methods:
+            add_node(g, {
+                "id": f"{cls}.{m}",
+                "kind": "unit",
+                "label": f"{cls}.{m}",
+                "layer": "Controller",
+            })
+    add_node(g, {"id": "S.m", "kind": "unit", "label": "S.m", "layer": "Service"})
+    prune_and_layout(g, max_nodes=50, layer_order=["Controller", "Service", "Table"])
+
+    ctrl = sorted(
+        [n for n in g["nodes"] if n["layer"] == "Controller"],
+        key=lambda n: n["row"],
+    )
+    groups = [n["group"] for n in ctrl]
+    # alphabetical class order, methods of same class contiguous
+    assert groups == [
+        "AController", "AController",
+        "BController",
+        "CController", "CController", "CController",
+    ]
+    # gap of two rows between A and B (room for next class title)
+    a_last = max(n["row"] for n in ctrl if n["group"] == "AController")
+    b_first = min(n["row"] for n in ctrl if n["group"] == "BController")
+    assert b_first == a_last + 3
+    assert any(cg["group"] == "CController" for cg in g.get("class_groups", []))

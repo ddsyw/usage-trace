@@ -293,3 +293,51 @@ def test_payload_unit_nodes_enriched_via_full_pipeline(fixture_root, profiles_di
             for n in unit_nodes
         )
     )
+
+
+def test_uniform_layer_class_method_nesting():
+    """Every class is nested: Layer frame > Class frame > method nodes.
+
+    TransferController (sole class in Controller) and BibleService (single method
+    among Services) use the same format as multi-method classes.
+    """
+    from common import new_graph, add_node
+    from graph import prune_and_layout
+    from render import render_svg
+
+    g = new_graph()
+    for m in ("syncData", "deleteData", "deleteCacheData"):
+        add_node(g, {
+            "id": f"TransferController.{m}", "kind": "unit",
+            "label": f"TransferController.{m}", "layer": "Controller",
+        })
+    add_node(g, {
+        "id": "BibleService.getTemplates", "kind": "unit",
+        "label": "BibleService.getTemplates", "layer": "Service",
+    })
+    for m in ("a", "b"):
+        add_node(g, {
+            "id": f"OrderService.{m}", "kind": "unit",
+            "label": f"OrderService.{m}", "layer": "Service",
+        })
+    prune_and_layout(g, 50, ["Controller", "Service", "Other"])
+    svg = render_svg(g)
+
+    assert "Controller · 3" in svg
+    assert 'data-class="TransferController"' in svg
+    assert 'data-class="BibleService"' in svg
+    assert 'data-class="OrderService"' in svg
+    # method-only node labels (class is on the class frame)
+    assert ">syncData<" in svg or "syncData" in svg
+    assert "getTemplates" in svg
+    assert "deleteCacheData" in svg
+    # class names appear as frame labels, not forced into every node tspan
+    assert "TransferController" in svg and "BibleService" in svg
+
+
+def test_display_lines_breaks_camel_case():
+    from render import _display_lines
+    lines = _display_lines("queryListByEntryNameAndStoreNo", 24)
+    assert lines == ["queryListByEntryNameAnd", "StoreNo"]
+    # hard mid-token split (old behavior) is gone
+    assert not any(line.startswith("tore") for line in lines)

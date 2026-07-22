@@ -10,7 +10,13 @@ from xml.sax.saxutils import escape
 
 from common import load_graph
 
-COL_W, ROW_H, NODE_W, NODE_H, PAD = 230, 72, 178, 44, 34
+COL_W, ROW_H, NODE_W, NODE_H, PAD = 280, 78, 178, 44, 28
+# Nest padding: Layer frame > Class frame > Method node (uniform hierarchy).
+# TOP values must clear title text so the first method never collides with labels.
+LAYER_PAD_X, LAYER_PAD_TOP, LAYER_PAD_BOTTOM = 18, 30, 16
+CLASS_PAD_X, CLASS_PAD_TOP, CLASS_PAD_BOTTOM = 12, 28, 12
+# Extra Y shift applied to every node so layer+first-class titles fit above row 0.
+TOP_HEADER = 36
 
 LAYER_CLASSES = {
     "Controller": "node-controller",
@@ -19,7 +25,8 @@ LAYER_CLASSES = {
     "Entity": "node-entity",
     "SQL": "node-sql",
     "Table": "node-table",
-    "Unknown": "node-unknown",
+    "Other": "node-other",
+    "Unknown": "node-other",  # legacy alias
 }
 
 SOURCE_LABELS = {
@@ -28,6 +35,7 @@ SOURCE_LABELS = {
     "jpa_repository": "JPA Repository",
     "raw_sql": "SQL 文件",
     "java_sql_literal": "Java SQL 字符串",
+    "mybatis_plus": "MyBatis-Plus",
 }
 
 
@@ -40,7 +48,7 @@ def _attr(s) -> str:
 
 
 def _layer_class(layer: str | None) -> str:
-    return LAYER_CLASSES.get(layer or "Unknown", "node-unknown")
+    return LAYER_CLASSES.get(layer or "Other", "node-other")
 
 
 def _source_label(source: str | None) -> str:
@@ -52,25 +60,71 @@ def _code_lines(values: list[str] | tuple[str, ...]) -> str:
 
 
 def _node_positions(graph: dict) -> dict[str, tuple[int, int]]:
+    """Map layout col/row to pixel coords.
+
+    ``TOP_HEADER`` reserves vertical room above row 0 for the layer banner and
+    the first class title so the first method is never drawn under those labels.
+    """
     return {
-        n["id"]: (PAD + int(n.get("col", 0)) * COL_W, PAD + int(n.get("row", 0)) * ROW_H)
+        n["id"]: (
+            PAD + int(n.get("col", 0)) * COL_W,
+            PAD + TOP_HEADER + int(n.get("row", 0)) * ROW_H,
+        )
         for n in graph.get("nodes", [])
     }
 
 
 def _display_lines(label: str, max_chars: int = 24) -> list[str]:
+    """Wrap label to at most 2 lines, preferring camelCase / snake_case breaks."""
     label = str(label)
     if len(label) <= max_chars:
         return [label]
-    head = label[:max_chars]
-    tail = label[max_chars:max_chars * 2 - 1]
-    if len(label) > max_chars * 2 - 1:
-        tail = tail[:max_chars - 2] + "..."
+
+    def _break_at(text: str, limit: int) -> int:
+        if len(text) <= limit:
+            return len(text)
+        # Prefer split before an uppercase letter (camelCase) or after _ / -
+        window = text[: limit + 1]
+        for i in range(limit, max(4, limit // 2), -1):
+            ch = window[i] if i < len(window) else ""
+            prev = window[i - 1]
+            if ch.isupper() and prev.islower():
+                return i
+            if prev in {"_", "-"}:
+                return i
+        return limit
+
+    cut = _break_at(label, max_chars)
+    head = label[:cut]
+    rest = label[cut:]
+    if len(rest) <= max_chars:
+        return [head, rest]
+    # second line: break again, ellipsis if still too long
+    cut2 = _break_at(rest, max_chars - 1)
+    tail = rest[:cut2]
+    if cut2 < len(rest):
+        tail = tail[: max(0, max_chars - 3)] + "..."
     return [head, tail]
 
 
+def _nodes_by_layer_and_class(nodes: list[dict], pos: dict[str, tuple[int, int]] | None = None
+                               ) -> dict[str, dict[str, list[dict]]]:
+    """layer -> class/group -> nodes (optionally restricted to positioned nodes)."""
+    out: dict[str, dict[str, list[dict]]] = defaultdict(lambda: defaultdict(list))
+    for n in nodes:
+        if pos is not None and n["id"] not in pos:
+            continue
+        layer = n.get("layer") or "Other"
+        group = str(n.get("group") or n.get("label") or n["id"])
+        out[layer][group].append(n)
+    return out
+
+
 def _node_label_lines(node: dict) -> list[str]:
+    """Node text inside a class frame: method / table name only (class is on the frame)."""
     label = str(node.get("label", node["id"]))
+    if node.get("kind") == "unit" and node.get("group") and "." in label:
+        return _display_lines(label.rsplit(".", 1)[-1])
     if node.get("kind") != "table":
         return _display_lines(label)
     lines = _display_lines(label, 22)[:1]
@@ -96,29 +150,79 @@ def _main_path_sets(graph: dict) -> tuple[set[str], set[str]]:
 
 
 def _group_frames_svg(graph: dict, pos: dict[str, tuple[int, int]]) -> str:
+    """Draw uniform Layer > Class > Method nesting for every column.
+
+    Geometry rules (to avoid label/node collisions):
+    - Class frame is a tight padded box around its method nodes, with
+      ``CLASS_PAD_TOP`` reserved for the class title above the first method.
+    - Layer frame expands around *all class frames* in the column, with
+      ``LAYER_PAD_TOP`` reserved for the layer title above the first class.
+    """
     nodes = graph.get("nodes", [])
     counts = _layer_counts(graph)
     parts: list[str] = []
+    by = _nodes_by_layer_and_class(nodes, pos)
+
+    # First pass: class frames geometry per layer
+    class_boxes: dict[str, list[tuple[str, float, float, float, float]]] = defaultdict(list)
     for layer in _ordered_layers(graph, counts):
-        group_nodes = [n for n in nodes if (n.get("layer") or "Unknown") == layer and n["id"] in pos]
-        if not group_nodes:
+        classes = by.get(layer) or {}
+        for cls_name in sorted(classes):
+            cnodes = classes[cls_name]
+            cxs = [pos[n["id"]][0] for n in cnodes]
+            cys = [pos[n["id"]][1] for n in cnodes]
+            cmin_x, cmax_x = min(cxs), max(cxs)
+            cmin_y, cmax_y = min(cys), max(cys)
+            cx = cmin_x - CLASS_PAD_X
+            cy = cmin_y - CLASS_PAD_TOP
+            cw = (cmax_x - cmin_x) + NODE_W + 2 * CLASS_PAD_X
+            ch = (cmax_y - cmin_y) + NODE_H + CLASS_PAD_TOP + CLASS_PAD_BOTTOM
+            class_boxes[layer].append((cls_name, cx, cy, cw, ch))
+
+    for layer in _ordered_layers(graph, counts):
+        boxes = class_boxes.get(layer) or []
+        if not boxes:
             continue
-        xs = [pos[n["id"]][0] for n in group_nodes]
-        ys = [pos[n["id"]][1] for n in group_nodes]
-        min_x, max_x = min(xs), max(xs)
-        min_y, max_y = min(ys), max(ys)
-        frame_x = max(4, min_x - 18)
-        frame_y = max(4, min_y - 30)
-        frame_w = max_x - min_x + NODE_W + 36
-        frame_h = max_y - min_y + NODE_H + 44
-        label = f"{layer} · {len(group_nodes)}"
+        # Layer frame encloses class frames (not raw nodes) so padding is consistent.
+        min_x = min(b[1] for b in boxes)
+        min_y = min(b[2] for b in boxes)
+        max_x = max(b[1] + b[3] for b in boxes)
+        max_y = max(b[2] + b[4] for b in boxes)
+        frame_x = min_x - LAYER_PAD_X
+        frame_y = min_y - LAYER_PAD_TOP
+        frame_w = (max_x - min_x) + 2 * LAYER_PAD_X
+        frame_h = (max_y - min_y) + LAYER_PAD_TOP + LAYER_PAD_BOTTOM
+        n_count = sum(len(by[layer][name]) for name, *_ in boxes)
+        label = f"{layer} · {n_count}"
+        # Keep frames on-canvas
+        if frame_x < 2:
+            frame_w += frame_x - 2
+            frame_x = 2
+        if frame_y < 2:
+            frame_h += frame_y - 2
+            frame_y = 2
         parts.append(
             f'<g class="graph-group {_layer_class(layer)}" data-layer="{_attr(layer)}">'
-            f'<rect class="group-frame" x="{frame_x}" y="{frame_y}" '
-            f'width="{frame_w}" height="{frame_h}" rx="10"/>'
-            f'<text class="group-label" x="{frame_x + 10}" y="{frame_y + 18}">{_esc(label)}</text>'
+            f'<rect class="group-frame" x="{frame_x:.1f}" y="{frame_y:.1f}" '
+            f'width="{frame_w:.1f}" height="{frame_h:.1f}" rx="10"/>'
+            f'<text class="group-label" x="{frame_x + 12:.1f}" y="{frame_y + 18:.1f}">'
+            f'{_esc(label)}</text>'
             "</g>"
         )
+        for cls_name, cx, cy, cw, ch in boxes:
+            # Clamp class box inside layer content area (below layer title)
+            cy2 = max(cy, frame_y + LAYER_PAD_TOP)
+            # If clamp moved the top down, keep bottom so nodes stay inside
+            ch2 = ch + (cy - cy2) if cy2 > cy else ch
+            parts.append(
+                f'<g class="class-group {_layer_class(layer)}" '
+                f'data-layer="{_attr(layer)}" data-class="{_attr(cls_name)}">'
+                f'<rect class="class-frame" x="{cx:.1f}" y="{cy2:.1f}" '
+                f'width="{cw:.1f}" height="{ch2:.1f}" rx="8"/>'
+                f'<text class="class-label" x="{cx + 10:.1f}" y="{cy2 + 16:.1f}">'
+                f'{_esc(cls_name)}</text>'
+                "</g>"
+            )
     return "".join(parts)
 
 
@@ -129,8 +233,8 @@ def render_svg(graph: dict) -> str:
         return '<svg id="trace-graph" viewBox="0 0 420 120"><text x="20" y="64">no nodes</text></svg>'
     ncol = max(n.get("col", 0) for n in nodes) + 1
     nrow = max(n.get("row", 0) for n in nodes) + 1
-    width = max(320, ncol * COL_W + PAD)
-    height = max(60, nrow * ROW_H + PAD)
+    width = max(320, ncol * COL_W + 2 * PAD)
+    height = max(60, TOP_HEADER + nrow * ROW_H + 2 * PAD)
     pos = _node_positions(graph)
     main_nodes, main_edges = _main_path_sets(graph)
     parts = [
@@ -293,7 +397,7 @@ def _usages_html(graph: dict) -> str:
 def _layer_summary_html(graph: dict) -> str:
     counts: dict[str, int] = {}
     for n in graph.get("nodes", []):
-        layer = n.get("layer") or "Unknown"
+        layer = n.get("layer") or "Other"
         counts[layer] = counts.get(layer, 0) + 1
     if not counts:
         return '<p class="muted">无节点</p>'
@@ -320,7 +424,7 @@ def _legend_html(graph: dict) -> str:
 def _layer_counts(graph: dict) -> dict[str, int]:
     counts: dict[str, int] = {}
     for n in graph.get("nodes", []):
-        layer = n.get("layer") or "Unknown"
+        layer = n.get("layer") or "Other"
         counts[layer] = counts.get(layer, 0) + 1
     return counts
 
@@ -377,7 +481,7 @@ def _main_paths_html(graph: dict) -> str:
     lanes = []
     for i, path in enumerate(paths, 1):
         steps = "".join(
-            f'<span class="path-step"><em>{_esc(layer or "Unknown")}</em>'
+            f'<span class="path-step"><em>{_esc(layer or "Other")}</em>'
             f'<strong>{_esc(label)}</strong></span>'
             for label, layer in zip(path["labels"], path["layers"])
         )

@@ -66,7 +66,7 @@ def _summary(node: dict) -> str:
         op = node.get("op") or "unknown"
         source = node.get("source_unit") or "traced call chain"
         return f"Database table {label} is accessed via {source} ({op})."
-    layer = node.get("layer") or "Unknown"
+    layer = node.get("layer") or "Other"
     return f"{label} participates in the traced keyword flow at the {layer} layer."
 
 
@@ -123,13 +123,13 @@ def _layer_id(layer: str) -> str:
 
 def _build_layers(graph: dict, layer_order: list[str]) -> list[dict]:
     order = list(dict.fromkeys(layer_order + [
-        node.get("layer", "Unknown") for node in graph.get("nodes", [])
+        node.get("layer", "Other") for node in graph.get("nodes", [])
     ]))
     layers = []
     for layer in order:
         node_ids = [
             node["id"] for node in graph.get("nodes", [])
-            if (node.get("layer") or "Unknown") == layer
+            if (node.get("layer") or "Other") == layer
         ]
         if not node_ids:
             continue

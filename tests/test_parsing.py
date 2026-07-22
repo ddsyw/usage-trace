@@ -72,3 +72,45 @@ def test_filesymbols_roundtrip():
     sym2 = FileSymbols.from_dict(d)
     assert {m.qual for m in sym.methods} == {m.qual for m in sym2.methods}
     assert {f.name for f in sym.fields} == {f.name for f in sym2.fields}
+
+
+def test_parse_this_field_access_receiver():
+    src = """
+public class OrderService {
+    private OrderMapper orderMapper;
+    public Object findByStoreNo(String storeNo) {
+        return this.orderMapper.selectByStoreNo(storeNo);
+    }
+}
+"""
+    sym = JavaParser().parse(src, "OrderService.java")
+    calls = [(c.callee_name, c.receiver) for c in sym.calls]
+    assert ("selectByStoreNo", "orderMapper") in calls
+
+
+def test_parse_super_and_this_receivers():
+    src = """
+public class Child extends Base {
+    void entry() { super.run(); this.run(); run(); }
+    void run() {}
+}
+class Base { void run() {} }
+"""
+    sym = JavaParser().parse(src, "Child.java")
+    by = {(c.callee_name, c.receiver) for c in sym.calls if c.caller_qual.endswith(".entry")}
+    assert ("run", "super") in by
+    assert ("run", "this") in by
+    assert ("run", None) in by
+
+
+def test_parse_interface_extends_basemapper():
+    src = """
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+@Repository
+public interface BibleTemplateEntryDao extends BaseMapper<TemplateEntryList> {
+    List<TemplateEntryList> query(String storeId);
+}
+"""
+    sym = JavaParser().parse(src, "BibleTemplateEntryDao.java")
+    supers = sym.inheritance.get("BibleTemplateEntryDao", [])
+    assert any("BaseMapper" in s and "TemplateEntryList" in s for s in supers)

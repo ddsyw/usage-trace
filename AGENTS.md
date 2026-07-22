@@ -1,6 +1,6 @@
 # AGENTS.md
 
-usage-trace is a Python CLI that traces a keyword's full usage across a Java/Spring codebase and produces a single offline HTML report. It ships as a Codex plugin and a Claude Code subagent.
+usage-trace is a Python CLI that traces a keyword's full usage across a Java/Spring codebase and produces a single offline HTML report. It ships as a Codex plugin and a coding-agent skill (not a Claude Code subagent).
 
 ## Quick start
 
@@ -46,14 +46,20 @@ src/                    CLI and analysis phases
 profiles/               Java analysis profiles (java-spring.yml, java-generic.yml)
 templates/              HTML report template
 tests/                  unit tests, e2e tests, and fixture projects
-skills/                 Codex skill definition (SKILL.md)
-.claude/agents/         Claude Code subagent definition
+skills/                 Skill definition (SKILL.md)
 .codex-plugin/          Codex plugin manifest
 plugins/usage-trace/    thin plugin wrapper for marketplace install
 .agents/plugins/        repo marketplace manifest
-scripts/                install-claude-agent.sh
-docs/                   guides
+scripts/                install-skill.sh
+docs/                   guides (skill-install.md)
 ```
+
+
+## Operations
+
+- Analysis runs via the local CLI (`usage-trace` / `python3 src/usage_trace.py`). Skill is optional glue for coding agents.
+- Ops guide: `docs/skill-install.md`. Install skill with `scripts/install-skill.sh` (not a subagent).
+- `install-claude-agent.sh` is a deprecated wrapper that forwards to `install-skill.sh`.
 
 ## Conventions
 

@@ -9,6 +9,7 @@ table_sources:
   jpa: {entity_annotation: "@Entity", table_annotation: '@Table\s*\(\s*name\s*=\s*"([^"]+)"'}
   mybatis: {mapper_xml_glob: "**/mapper/**/*.xml", namespace_to_interface: true}
   raw_sql: ["**/*.sql"]
+  java_sql_literals: true
 call_patterns:
   method_invocation: '\b([A-Za-z_][\w]*)\s*\('
   chain_step: '\.\s*([A-Za-z_]\w*)\s*\('

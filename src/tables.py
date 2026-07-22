@@ -184,31 +184,87 @@ def _class_name(text: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _concat_java_string_expr(expr: str) -> str | None:
+    """Join adjacent string literals in a Java expression (``"a" + "b"``).
+
+    Returns None when the expression is not purely string-literal concatenation
+    (e.g. contains identifiers), so we do not invent partial SQL.
+    """
+    parts = re.findall(r'"((?:\\.|[^"\\])*)"', expr)
+    if not parts:
+        return None
+    # Reject if non-string tokens remain after stripping literals and +/ws
+    residual = re.sub(r'"((?:\\.|[^"\\])*)"', "", expr)
+    residual = re.sub(r"[\s+]+", "", residual)
+    if residual:
+        return None
+    return _unescape("".join(parts))
+
+
 def _parse_mybatis_annotations(root: Path, index) -> list[dict]:
     out: list[dict] = []
-    annotation_rx = re.compile(
-        r"@(?:[\w.]+\.)?(Select|Insert|Update|Delete)\s*\(\s*\"((?:\\.|[^\"])*)\""
-    )
     method_rx = re.compile(r"\b([A-Za-z_]\w*)\s*\([^)]*\)\s*(?:;|\{)?")
     for java in [Path(p) for p in index.files if p.endswith(".java")]:
         try:
-            lines = java.read_text(encoding="utf-8", errors="replace").splitlines()
+            source = java.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        text = "\n".join(lines)
-        cls = _class_name(text)
+        cls = _class_name(source)
         if not cls:
             continue
-        for i, line in enumerate(lines):
-            m = annotation_rx.search(line)
+        # Walk annotations with a simpler scan: find @Op( then balanced parens
+        i = 0
+        lower = source
+        while True:
+            m = re.search(
+                r"@(?:[\w.]+\.)?(Select|Insert|Update|Delete)\s*\(",
+                lower[i:],
+                re.IGNORECASE,
+            )
             if not m:
-                continue
+                break
             op = m.group(1).lower()
-            sql = _unescape(m.group(2))
+            start = i + m.end()  # after opening (
+            # balanced paren scan
+            depth = 1
+            j = start
+            in_str = False
+            esc = False
+            while j < len(source) and depth:
+                ch = source[j]
+                if in_str:
+                    if esc:
+                        esc = False
+                    elif ch == "\\":
+                        esc = True
+                    elif ch == '"':
+                        in_str = False
+                else:
+                    if ch == '"':
+                        in_str = True
+                    elif ch == "(":
+                        depth += 1
+                    elif ch == ")":
+                        depth -= 1
+                j += 1
+            if depth != 0:
+                i = start
+                continue
+            expr = source[start:j - 1]
+            sql = _concat_java_string_expr(expr)
+            if sql is None:
+                # single-literal fallback already covered by concat; try raw one string
+                one = re.search(r'^\s*"((?:\\.|[^"\\])*)"\s*$', expr, re.DOTALL)
+                sql = _unescape(one.group(1)) if one else None
+            i = j
+            if not sql:
+                continue
+            # method after annotation
+            rest = source[j:]
             method = None
-            for nxt in lines[i + 1:]:
-                stripped = nxt.strip()
-                if not stripped or stripped.startswith("@"):
+            for line in rest.splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("@") or stripped.startswith("//"):
                     continue
                 mm = method_rx.search(stripped)
                 if mm:
@@ -366,6 +422,111 @@ def _statement_record(st: dict, qual: str) -> dict:
     }
 
 
+
+_MYBATIS_PLUS_CRUD = {
+    "selectList", "selectById", "selectOne", "selectCount", "selectMaps", "selectObjs",
+    "selectBatchIds", "selectPage", "selectMapsPage", "selectByMap",
+    "insert", "update", "updateById",
+    "delete", "deleteById", "deleteBatchIds", "deleteByMap",
+}
+_BASE_MAPPER_RE = re.compile(
+    r"(?:[\w.]+\.)?BaseMapper\s*<\s*([\w.]+)\s*>",
+    re.IGNORECASE,
+)
+_TABLE_NAME_RE = re.compile(
+    r"@TableName\s*\(\s*(?:value\s*=\s*)?\"([^\"]+)\"",
+)
+
+
+def _entity_table_names(index) -> dict[str, str]:
+    """Map simple class name -> physical table from @TableName / @Table / @Entity."""
+    out: dict[str, str] = {}
+    for path in index.files:
+        if not str(path).endswith(".java"):
+            continue
+        try:
+            text = Path(path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        cls = _class_name(text)
+        if not cls:
+            continue
+        m = _TABLE_NAME_RE.search(text)
+        if m:
+            out[cls] = m.group(1)
+            continue
+        if "@Entity" in text:
+            tm = re.search(r"@Table\s*\(\s*name\s*=\s*\"([^\"]+)\"", text)
+            out[cls] = tm.group(1) if tm else cls
+    return out
+
+
+def _dao_entity_from_inheritance(index) -> dict[str, str]:
+    """Map Dao/Mapper simple name -> entity simple name via BaseMapper<Entity>."""
+    out: dict[str, str] = {}
+    for cls, supers in (index.inheritance or {}).items():
+        for parent in supers:
+            m = _BASE_MAPPER_RE.search(parent)
+            if m:
+                out[cls] = m.group(1).split(".")[-1].strip()
+                break
+    return out
+
+
+def _parse_mybatis_plus_calls(graph: dict, index, root: Path) -> list[dict]:
+    """Attach tables for MyBatis-Plus BaseMapper CRUD calls on traced units.
+
+    Library methods like ``selectList`` / ``delete`` are not in the project
+    index, so call-graph resolution alone never reaches a table. Infer the
+    table from the receiver's Dao type (``BaseMapper<Entity>`` + ``@TableName``)
+    and attribute the access to the *caller* unit already on the graph.
+    """
+    entity_tables = _entity_table_names(index)
+    dao_entities = _dao_entity_from_inheritance(index)
+    if not entity_tables:
+        return []
+    out: list[dict] = []
+    unit_ids = [n["id"] for n in graph["nodes"] if n.get("kind") == "unit"]
+    for uid in unit_ids:
+        types = index.symbol_types(uid) if hasattr(index, "symbol_types") else {}
+        for call in (getattr(index, "calls_by_caller", {}) or {}).get(uid, []):
+            callee = getattr(call, "callee_name", None) or getattr(call, "callee", None)
+            if callee not in _MYBATIS_PLUS_CRUD:
+                continue
+            recv = getattr(call, "receiver", None)
+            if not recv:
+                continue
+            rtype = types.get(recv) or ""
+            simple = rtype.split(".")[-1].split("<", 1)[0].strip() or recv
+            entity = dao_entities.get(simple)
+            if not entity:
+                for parent in (index.inheritance or {}).get(simple, []):
+                    m = _BASE_MAPPER_RE.search(parent)
+                    if m:
+                        entity = m.group(1).split(".")[-1].strip()
+                        break
+            if not entity:
+                continue
+            table = entity_tables.get(entity)
+            if not table:
+                continue
+            method_file = ""
+            meth = (index.methods or {}).get(uid)
+            if meth is not None:
+                method_file = _rel_path(root, Path(getattr(meth, "file", "") or ""))
+            out.append({
+                "source": "mybatis_plus",
+                "file": method_file,
+                "qual": uid,
+                "method": callee,
+                "op": _op_from_method(callee),
+                "tables": [table],
+                "sql": f"MyBatis-Plus {simple}.{callee} -> {entity} ({table})",
+                "statement_id": f"{simple}.{callee}",
+            })
+    return out
+
+
 def resolve_tables(graph: dict, index, profile: dict) -> dict:
     root = Path(index.root) if getattr(index, "root", None) else _root_from_index(index)
     ts = profile.get("table_sources", {})
@@ -383,6 +544,9 @@ def resolve_tables(graph: dict, index, profile: dict) -> dict:
         statements += _parse_raw_sql(root, ts.get("raw_sql") or [], unit_by_id, exclude_dirs)
     if "java_sql_literals" in ts:
         statements += _parse_java_sql_literals(root, unit_by_id)
+    # MyBatis-Plus BaseMapper CRUD on traced units (independent of profile keys:
+    # tables come from @TableName + extends BaseMapper<Entity>).
+    statements += _parse_mybatis_plus_calls(graph, index, root)
 
     table_by_name = {n.get("table"): n for n in graph["nodes"] if n["kind"] == "table"}
     db_statements: list[dict] = []

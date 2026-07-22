@@ -18,7 +18,7 @@ def test_layer_of_by_path_hint():
               {"name": "Repository", "path_hint": "(mapper|repository|dao)"}]
     assert layer_of("pkg/service/OrderService.java", layers) == "Service"
     assert layer_of("pkg/mapper/OrderMapper.java", layers) == "Repository"
-    assert layer_of("pkg/util/Helper.java", layers) == "Unknown"
+    assert layer_of("pkg/util/Helper.java", layers) == "Other"
 
 
 def test_layer_of_by_annotation_match_when_path_is_generic():
@@ -68,5 +68,64 @@ def test_main_honors_extra_variants(tmp_path, profiles_dir, monkeypatch, capsys)
     main()
 
     sites = json.loads(capsys.readouterr().out)
+    assert len(sites) == 2  # param + return (word-boundary multi-hit per line)
+    assert all(s["snippet"] == "public Object query(String shopCode) { return shopCode; }" for s in sites)
+    assert {s["col"] for s in sites} == {sites[0]["col"], sites[1]["col"]}
+
+
+def test_discover_word_boundary_skips_substrings(tmp_path, profiles_dir):
+    source = tmp_path / "Id.java"
+    source.write_text(
+        "public class IdentityService {\n"
+        "  void voidMethod(String validId) { int identity = 1; int id = 2; }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    profile = load_profile("java-spring", profiles_dir)
+    idx = ProjectIndex()
+    idx.build(tmp_path, profile)
+    sites = discover("id", profile, None, idx)
     assert len(sites) == 1
-    assert sites[0]["snippet"] == "public Object query(String shopCode) { return shopCode; }"
+    # Only the standalone variable `id`, not IdentityService / validId / identity.
+    raw = source.read_text().splitlines()[sites[0]["line"] - 1]
+    assert raw[sites[0]["col"] - 1:sites[0]["col"] + 1] == "id"
+    assert "identity" not in raw[max(0, sites[0]["col"] - 4):sites[0]["col"] + 6]
+
+
+def test_layer_of_ignores_hyphenated_project_name():
+    """``common-entry-service`` must not match path_hint ``service``."""
+    layers = [{"name": "Controller", "path_hint": "controller"},
+              {"name": "Service", "path_hint": "service", "match": "@Service"},
+              {"name": "Repository", "path_hint": "(mapper|repository|dao)",
+               "match": "@Repository|@Mapper"}]
+    dao = ("/work/common-entry-service/entry-dao/src/main/java/"
+           "com/leyantech/entry/dao/repository/bible/BibleTemplateEntryDao.java")
+    text = "@Repository\npublic interface BibleTemplateEntryDao {}"
+    assert layer_of(dao, layers, text) == "Repository"
+    svc = "/work/common-entry-service/entry-core/src/main/java/com/x/service/impl/FooService.java"
+    assert layer_of(svc, layers, "@Service\nclass FooService {}") == "Service"
+
+
+def test_variants_include_camel_plural():
+    v = keyword_variants("storeNo")
+    assert "storeNos" in v and "StoreNos" in v
+
+
+def test_discover_matches_camelcase_embedded_and_plural(tmp_path, profiles_dir):
+    source = tmp_path / "Api.java"
+    source.write_text(
+        "public class Api {\n"
+        "  void transferTemplate(List<String> storeNos, String entryName) {}\n"
+        "  List x = dao.queryListByEntryNameAndStoreNo(storeNos.get(0));\n"
+        "  String y = req.getStoreNo();\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    profile = load_profile("java-spring", profiles_dir)
+    idx = ProjectIndex()
+    idx.build(tmp_path, profile)
+    sites = discover("storeNo", profile, None, idx)
+    snippets = " | ".join(s["snippet"] for s in sites)
+    assert "storeNos" in snippets
+    assert any("getStoreNo" in s["snippet"] for s in sites)
+    assert any("AndStoreNo" in s["snippet"] for s in sites)

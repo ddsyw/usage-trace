@@ -1,72 +1,19 @@
-# Claude Code Agent Setup
+# Deprecated: Claude Code Agent
 
-`usage-trace` is a Python CLI plus a Claude Code subagent definition. The CLI does the analysis; the Claude Code agent tells Claude when and how to run it.
+`usage-trace` is packaged as a **skill + CLI**, not a Claude Code subagent.
 
-## 1. Install the CLI
+See **[skill-install.md](./skill-install.md)** for the full operations guide
+(CLI install, skill install, FAQ).
 
-From this repository:
+The historical agent definition at `.claude/agents/usage-trace.md` has been
+removed. Use:
 
 ```bash
-cd /path/to/usage-trace
+# 1) CLI (required)
 python3 -m pip install -e .
+
+# 2) skill (optional, for assistants)
+bash scripts/install-skill.sh user
+# or
+bash scripts/install-skill.sh project .
 ```
-
-Verify:
-
-```bash
-usage-trace --keyword storeNo --root tests/fixtures/java-spring
-```
-
-## 2. Install the Claude Code agent
-
-Project-level install, recommended when only one Java project should use this agent:
-
-```bash
-cd /path/to/your/java-project
-bash /path/to/usage-trace/scripts/install-claude-agent.sh project .
-```
-
-This creates:
-
-```text
-/path/to/your/java-project/.claude/agents/usage-trace.md
-```
-
-User-level install, useful when all Claude Code projects should see the agent:
-
-```bash
-bash /path/to/usage-trace/scripts/install-claude-agent.sh user
-```
-
-This creates:
-
-```text
-~/.claude/agents/usage-trace.md
-```
-
-## 3. Use it in Claude Code
-
-Open Claude Code from the Java project root, then ask:
-
-```text
-Use usage-trace to analyze orderId in the current project. Generate .usage-trace/orderId-report.html, then summarize the usage sites, call chain, and database tables.
-```
-
-The agent should run:
-
-```bash
-usage-trace --keyword orderId --root . --profile auto --depth 4
-```
-
-Open the result on macOS:
-
-```bash
-open .usage-trace/orderId-report.html
-```
-
-## Notes
-
-- Project roots should contain the real Java project, for example a directory with `pom.xml`, `build.gradle`, or `src/main/java`.
-- `--profile auto` chooses `java-spring` for Spring projects and `java-generic` for plain Java projects.
-- Non-Java projects are not supported for full call-chain tracing yet.
-- If Claude Code cannot find `usage-trace`, run `python3 -m pip install -e /path/to/usage-trace` again in the same shell environment used by Claude Code.

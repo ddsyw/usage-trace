@@ -37,7 +37,7 @@ def _template_path() -> Path:
 
 def _layer_order(profile: dict) -> list[str]:
     order = [layer["name"] for layer in profile.get("layers", [])]
-    return order + [name for name in ("Table", "Unknown") if name not in order]
+    return order + [name for name in ("Table", "Other") if name not in order]
 
 
 def detect_profile_name(root: Path | str) -> str:

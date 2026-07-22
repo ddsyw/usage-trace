@@ -2,7 +2,7 @@
 
 [English README](README.md)
 
-`usage-trace` 是一个本地代码分析 CLI，同时提供 Claude Code subagent 配置。它用于在 Java 项目中追踪某个字段或标识符的完整使用路径。输入 `orderId`、`storeNo` 这类关键字后，工具会生成一个离线 HTML 报告，展示使用位置、调用链和相关数据库表。
+`usage-trace` 是一个本地代码分析 CLI，并作为编码助手 **Skill** 分发。它用于在 Java 项目中追踪某个字段或标识符的完整使用路径。输入 `orderId`、`storeNo` 这类关键字后，工具会生成一个离线 HTML 报告，展示使用位置、调用链和相关数据库表。
 
 这个项目适合日常代码排查场景：当你想知道“这个字段在哪里被使用、经过了哪些方法、最终访问了哪些表”时，可以直接用它生成分析报告。
 
@@ -18,7 +18,7 @@
   - 原始 SQL 文件
   - Java 字符串 SQL
 - 生成单文件离线 HTML 报告，不依赖外部资源。
-- 支持通过 Claude Code subagent 调用。
+- 以 Skill 形式接入 Codex / Claude 等编码助手（不再使用 subagent）。
 - 支持 Spring 项目和非 Spring 普通 Java 项目，默认使用 `--profile auto` 自动识别。
 - 保留 `codex-find` 兼容命令，主项目名和主命令为 `usage-trace`。
 
@@ -106,39 +106,47 @@ usage-trace --keyword <identifier> --root <project> [options]
 codex-find --keyword orderId --root /path/to/your/java-project
 ```
 
-## Claude Code Agent 用法
+## 怎么运行（优先 CLI）
 
-Claude Code subagent 定义文件位于：
-
-```text
-.claude/agents/usage-trace.md
-```
-
-先安装 CLI：
+分析由本地 **CLI** 完成。**不需要** agent / skill 也能生成报告。
 
 ```bash
 python3 -m pip install -e .
+usage-trace --keyword orderId --root /path/to/your/java-project --profile auto
+open .usage-trace/orderId-report.html
 ```
 
-安装到某个 Java 项目：
+| 组件 | 作用 | 是否必须 |
+|------|------|----------|
+| `usage-trace` CLI | 追踪代码并写离线 HTML | **必须** |
+| Skill（`SKILL.md`） | 告诉 Codex/Claude/Cursor 何时、如何调用 CLI | 可选 |
+| Codex plugin | 通过 marketplace 分发 skill | 可选 |
+
+完整操作说明（安装、Skill、FAQ）：**[docs/skill-install.md](docs/skill-install.md)**。
+
+## Skill 用法（可选，Claude / Codex / Cursor）
+
+以 **Skill** 形式提供，**不再**提供 Claude Code subagent。定义文件：
+
+```text
+skills/usage-trace/SKILL.md
+```
+
+仍须先安装 CLI，再装 skill：
 
 ```bash
-bash scripts/install-claude-agent.sh project /path/to/your/java-project
+bash scripts/install-skill.sh user              # 用户级 skill 目录
+bash scripts/install-skill.sh project /path/to/java-project
+bash scripts/install-skill.sh codex-user        # 仅 ~/.codex/skills
 ```
 
-或安装到当前用户级 Claude Code agents：
-
-```bash
-bash scripts/install-claude-agent.sh user
-```
-
-然后在 Java 项目根目录打开 Claude Code，输入：
+然后在 Java 项目里提问：
 
 ```text
 使用 usage-trace 分析当前项目的 orderId，生成 .usage-trace/orderId-report.html，并总结使用位置、调用链和涉及数据库表。
 ```
 
-agent 应执行：
+助手应执行：
 
 ```bash
 usage-trace --keyword orderId --root . --profile auto --depth 4
@@ -242,13 +250,13 @@ python3 src/usage_trace.py \
 ## 项目结构
 
 ```text
-.claude/agents/usage-trace.md      Claude Code subagent 定义
 .agents/plugins/marketplace.json   Codex repo marketplace
 .codex-plugin/plugin.json          根目录 Codex plugin manifest
-docs/claude-code-agent.md          Claude Code 安装和使用说明
+docs/skill-install.md              Skill 安装与使用说明
 plugins/usage-trace/               用于 marketplace 安装的 thin Codex plugin
 profiles/                          Java 分析 profile
-scripts/install-claude-agent.sh    Claude Code agent 安装脚本
+scripts/install-skill.sh           Skill 安装脚本（user / project / codex-user）
+skills/usage-trace/SKILL.md        Skill 定义（与 plugin 内副本保持同步）
 src/                               CLI 和分析阶段代码
 templates/report.html.tmpl         离线报告模板
 tests/                             单元测试、集成测试和示例项目

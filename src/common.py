@@ -71,6 +71,30 @@ def _annotation_match(pattern: str, text: str) -> bool:
     return False
 
 
+def _path_hint_match(fpath: str, hint: str) -> bool:
+    """Match path_hint against path *segments*, not the raw full path.
+
+    Full-path search false-positives on project/module names such as
+    ``common-entry-service`` matching ``service`` (hyphen is a regex word
+    boundary). Segment fullmatch keeps ``.../service/Foo.java`` and
+    ``.../dao/Bar.java`` while ignoring hyphenated parent folders.
+    """
+    if not hint:
+        return False
+    parts: list[str] = []
+    for part in fpath.replace("\\", "/").split("/"):
+        if not part:
+            continue
+        parts.append(part)
+        if "." in part:
+            parts.append(part.rsplit(".", 1)[0])
+    try:
+        rx = re.compile(rf"^(?:{hint})$", re.IGNORECASE)
+    except re.error:
+        rx = re.compile("^" + re.escape(hint) + "$", re.IGNORECASE)
+    return any(rx.match(part) for part in parts)
+
+
 def classify_layer(file: str, layers: list[dict], text: str | None = None) -> str:
     """Classify a source file by ordered layer path hints and optional content matches."""
     fpath = str(file).replace("\\", "/")
@@ -78,11 +102,12 @@ def classify_layer(file: str, layers: list[dict], text: str | None = None) -> st
     for layer in layers:
         hint = layer.get("path_hint")
         match = layer.get("match")
-        if hint and re.search(hint, fpath, re.IGNORECASE):
+        if hint and _path_hint_match(fpath, hint):
             return layer["name"]
         if match and (re.search(match, text) or _annotation_match(match, text)):
             return layer["name"]
-    return "Unknown"
+    return "Other"
+
 
 
 # ---- Grep wrapper ----

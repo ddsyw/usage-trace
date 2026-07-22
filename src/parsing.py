@@ -160,13 +160,26 @@ def _collect_type_names(node, src, out: list[str]) -> None:
 
 
 def _supertypes(class_node, src) -> list[str]:
+    """Collect extends/implements types for class *and* interface declarations.
+
+    tree-sitter-java exposes:
+      - class: named fields ``superclass`` / ``interfaces`` (→ super_interfaces)
+      - interface: child node ``extends_interfaces`` (not a named field)
+    """
     supers: list[str] = []
-    sc = class_node.child_by_field_name("superclass")
-    if sc:
-        _collect_type_names(sc, src, supers)
-    si = class_node.child_by_field_name("interfaces")
-    if si:
-        _collect_type_names(si, src, supers)
+    seen: set[int] = set()
+
+    def add_from(node) -> None:
+        if node is None or id(node) in seen:
+            return
+        seen.add(id(node))
+        _collect_type_names(node, src, supers)
+
+    add_from(class_node.child_by_field_name("superclass"))
+    add_from(class_node.child_by_field_name("interfaces"))
+    for c in class_node.children:
+        if c.type in ("extends_interfaces", "super_interfaces", "superclass"):
+            add_from(c)
     return supers
 
 
@@ -194,6 +207,33 @@ def _iter_declarators(field_node):
                 yield gc
 
 
+def _receiver_name(obj_node, src) -> str | None:
+    """Normalize call receivers for resolution.
+
+    - orderMapper.select -> orderMapper
+    - this.orderMapper.select / field_access -> field name
+    - this.run / super.run -> this / super
+    - chained svc.repo().query -> None (unknown intermediate type)
+    """
+    if obj_node is None:
+        return None
+    t = obj_node.type
+    if t == "identifier":
+        return _text(src, obj_node)
+    if t in ("this", "super"):
+        return t
+    if t == "field_access":
+        field = obj_node.child_by_field_name("field")
+        if field is not None:
+            return _text(src, field)
+        # last identifier in the access chain
+        for c in reversed(list(obj_node.children)):
+            if c.type == "identifier":
+                return _text(src, c)
+        return None
+    return None
+
+
 def _collect_calls(method_node, src, file, caller_qual, sym: FileSymbols) -> None:
     stack = list(method_node.children)
     while stack:
@@ -202,7 +242,7 @@ def _collect_calls(method_node, src, file, caller_qual, sym: FileSymbols) -> Non
             name_node = n.child_by_field_name("name")
             obj_node = n.child_by_field_name("object")
             callee = _text(src, name_node)
-            receiver = _text(src, obj_node) if (obj_node is not None and obj_node.type == "identifier") else None
+            receiver = _receiver_name(obj_node, src)
             if callee:
                 sym.calls.append(CallSite(caller_qual, callee, receiver, file, n.start_point[0] + 1))
         stack.extend(n.children)

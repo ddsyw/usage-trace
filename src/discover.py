@@ -16,16 +16,26 @@ def keyword_variants(keyword: str, extra_variants: list[str] | None = None) -> l
     """Expand a keyword into common naming variants (longest first)."""
     parts = [p for p in re.split(r"[_\-]+|(?<=[a-z0-9])(?=[A-Z])", keyword) if p] or [keyword]
     lower = "_".join(p.lower() for p in parts)
+    pascal = "".join(p.capitalize() for p in parts)  # StoreNo
+    camel = (
+        parts[0].lower() + "".join(p.capitalize() for p in parts[1:])
+        if parts else keyword
+    )
     variants = {
         keyword,
         lower,                                  # store_no
         lower.upper(),                          # STORE_NO
         "".join(p.lower() for p in parts),      # storeno
         "-".join(p.lower() for p in parts),     # store-no
-        "".join(p.capitalize() for p in parts), # StoreNo
+        pascal,                                 # StoreNo
+        camel,                                  # storeNo (normalized)
         lower + "s",                            # store_nos
         lower + "_list",
     }
+    # camelCase / PascalCase plurals: storeNos / StoreNos (not only store_nos)
+    if not keyword.lower().endswith("s"):
+        variants.add(camel + "s")
+        variants.add(pascal + "s")
     variants.update(v.strip() for v in (extra_variants or []) if v.strip())
     return sorted(variants, key=len, reverse=True)
 
@@ -78,11 +88,34 @@ def _code_portion(text: str) -> str:
     return text if comment_at is None else text[:comment_at]
 
 
+def _variant_pattern(variants: list[str], *, compound: bool = False) -> re.Pattern[str]:
+    """Build an alternation regex with identifier-aware boundaries.
+
+    - Always reject matches glued inside longer alnum tokens (``id`` ∉ ``void`` /
+      ``identity``).
+    - For *compound* camelCase keywords (``storeNo``), also allow the PascalCase
+      form to match at a camelCase boundary so ``getStoreNo`` and
+      ``queryListByEntryNameAndStoreNo`` hit ``StoreNo``.
+    """
+    if not variants:
+        return re.compile(r"(?!)")  # never matches
+    alts: list[str] = []
+    for v in variants:
+        esc = re.escape(v)
+        if compound and v[:1].isupper():
+            # start of identifier OR after a lower/digit (camelCase segment)
+            alts.append(rf"(?:(?<![A-Za-z0-9$])|(?<=[a-z0-9])){esc}(?![A-Za-z0-9$])")
+        else:
+            alts.append(rf"(?<![A-Za-z0-9$]){esc}(?![A-Za-z0-9$])")
+    return re.compile("|".join(alts))
+
+
 def discover(keyword: str, profile: dict, extra_variants: list[str] | None = None,
              index=None) -> list[dict]:
     variants = keyword_variants(keyword, extra_variants)
-    pattern = "|".join(re.escape(v) for v in variants)
-    rx = re.compile(pattern)
+    parts = [p for p in re.split(r"[_\-]+|(?<=[a-z0-9])(?=[A-Z])", keyword) if p]
+    compound = len(parts) > 1
+    rx = _variant_pattern(variants, compound=compound)
     layers = profile.get("layers", [])
     sites: list[dict] = []
     paths = list(index.files.keys()) if index is not None else []
@@ -94,17 +127,15 @@ def discover(keyword: str, profile: dict, extra_variants: list[str] | None = Non
         layer = index.layers.get(path) if index is not None else None
         for i, line in enumerate(text.splitlines(), 1):
             code = _code_portion(line)
-            m = rx.search(code)
-            if not m:
-                continue
-            sites.append({
-                "file": path,
-                "line": i,
-                "col": m.start() + 1,
-                "occurrence_type": _occurrence_type(line, m),
-                "layer": layer or classify_layer(path, layers, text),
-                "snippet": line.strip(),
-            })
+            for m in rx.finditer(code):
+                sites.append({
+                    "file": path,
+                    "line": i,
+                    "col": m.start() + 1,
+                    "occurrence_type": _occurrence_type(line, m),
+                    "layer": layer or classify_layer(path, layers, text),
+                    "snippet": line.strip(),
+                })
     return sites
 
 

@@ -462,3 +462,79 @@ def test_unescape_handles_escape_ordering_correctly():
     assert _unescape(chr(92) + "x") == chr(92) + "x"
     # trailing lone backslash passes through unchanged
     assert _unescape("abc" + chr(92)) == "abc" + chr(92)
+
+
+def test_mybatis_multiline_annotation(tmp_path, profiles_dir):
+    from tables import _parse_mybatis_annotations
+    from index import ProjectIndex
+    profile = load_profile("java-spring", profiles_dir)
+    (tmp_path / "M.java").write_text(
+        "public interface M {\n"
+        "  @Select(\n"
+        "    \"SELECT * FROM t_order \" +\n"
+        "    \"WHERE store_no = #{storeNo}\"\n"
+        "  )\n"
+        "  Object q(String storeNo);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    idx = ProjectIndex()
+    idx.build(tmp_path, profile)
+    stmts = _parse_mybatis_annotations(tmp_path, idx)
+    assert len(stmts) == 1
+    assert stmts[0]["tables"] == ["t_order"]
+    assert "t_order" in stmts[0]["sql"]
+    assert stmts[0]["qual"] == "M.q"
+
+
+def test_mybatis_plus_basemapper_links_table(tmp_path, profiles_dir):
+    """CRUD calls on BaseMapper Dao resolve to @TableName via caller unit."""
+    (tmp_path / "model").mkdir()
+    (tmp_path / "dao").mkdir()
+    (tmp_path / "service").mkdir()
+    (tmp_path / "model" / "Entry.java").write_text(
+        "package model;\n"
+        "import com.baomidou.mybatisplus.annotation.TableName;\n"
+        '@TableName("t_entry")\n'
+        "public class Entry { private String storeNo; }\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "dao" / "EntryDao.java").write_text(
+        "package dao;\n"
+        "import com.baomidou.mybatisplus.core.mapper.BaseMapper;\n"
+        "import model.Entry;\n"
+        "import org.springframework.stereotype.Repository;\n"
+        "@Repository\n"
+        "public interface EntryDao extends BaseMapper<Entry> {}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "service" / "EntryService.java").write_text(
+        "package service;\n"
+        "import dao.EntryDao;\n"
+        "import org.springframework.stereotype.Service;\n"
+        "@Service\n"
+        "public class EntryService {\n"
+        "  private EntryDao entryDao;\n"
+        "  public void find(String storeNo) { entryDao.selectList(null); }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    from common import load_profile, new_graph, add_node
+    from index import ProjectIndex
+    from tables import resolve_tables
+    profile = load_profile("java-spring", profiles_dir)
+    idx = ProjectIndex()
+    idx.build(tmp_path, profile)
+    g = new_graph()
+    add_node(g, {
+        "id": "EntryService.find", "kind": "unit", "label": "EntryService.find",
+        "layer": "Service", "file": str(tmp_path / "service" / "EntryService.java"),
+        "usages": [],
+    })
+    resolve_tables(g, idx, profile)
+    tables = [n for n in g["nodes"] if n.get("kind") == "table"]
+    assert any(n.get("table") == "t_entry" for n in tables), g.get("db_statements")
+    assert any(
+        e.get("to") == "table:t_entry" and e.get("from") == "EntryService.find"
+        for e in g["edges"]
+    )

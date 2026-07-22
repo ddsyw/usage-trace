@@ -187,17 +187,20 @@
   .node-entity{color:var(--layer-entity)}.node-entity rect,.node-entity circle{fill:var(--layer-entity-bg);stroke:var(--layer-entity)}
   .node-sql{color:var(--layer-sql)}.node-sql rect,.node-sql circle{fill:var(--layer-sql-bg);stroke:var(--layer-sql)}
   .node-table{color:var(--layer-table)}.node-table rect,.node-table circle{fill:var(--layer-table-bg);stroke:var(--layer-table)}
-  .node-unknown{color:var(--layer-unknown)}.node-unknown rect,.node-unknown circle{fill:var(--layer-unknown-bg);stroke:var(--layer-unknown)}
+  .node-other,.node-unknown{color:var(--layer-unknown)}.node-other rect,.node-other circle,.node-unknown rect,.node-unknown circle{fill:var(--layer-unknown-bg);stroke:var(--layer-unknown)}
   .node-controller .swatch{background:var(--layer-controller)}
   .node-service .swatch{background:var(--layer-service)}
   .node-repository .swatch{background:var(--layer-repository)}
   .node-entity .swatch{background:var(--layer-entity)}
   .node-sql .swatch{background:var(--layer-sql)}
   .node-table .swatch{background:var(--layer-table)}
-  .node-unknown .swatch{background:var(--layer-unknown)}
+  .node-other .swatch,.node-unknown .swatch{background:var(--layer-unknown)}
   .graph-group{pointer-events:none}
   .graph-group .group-frame{fill:var(--group-fill);stroke:currentColor;stroke-width:1.2;stroke-dasharray:7 5;opacity:.42}
   .graph-group .group-label{font-size:var(--fs-base);font-weight:700;fill:currentColor}
+  .class-frame{fill:rgba(15,23,42,.03);stroke:currentColor;stroke-width:1;stroke-dasharray:3 3;opacity:.55}
+  .class-label{font-size:10px;font-weight:600;fill:currentColor;opacity:.85}
+  .class-group{pointer-events:none}
   .graph-group.dimmed{opacity:.18}
   .details h2{font-size:var(--fs-lg);margin:0 0 4px;line-height:1.25;font-weight:700}
   .badge-row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 12px}
@@ -441,7 +444,7 @@
   }
   function nodeLayer(id){
     const node = nodeMap.get(id);
-    return node && node.layer ? node.layer : "Unknown";
+    return node && node.layer ? node.layer : "Other";
   }
   function edgeTouchesLayer(edge, layer){
     return nodeLayer(edge.from) === layer || nodeLayer(edge.to) === layer;

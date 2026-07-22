@@ -2,7 +2,7 @@
 
 [中文文档](README-CN.md)
 
-`usage-trace` is a local code-analysis CLI and Claude Code subagent for tracing a
+`usage-trace` is a local code-analysis CLI and coding-agent **skill** for tracing a
 field or identifier through a Java codebase. Given a keyword such as `orderId` or
 `storeNo`, it produces a single offline HTML report covering usage sites, call
 chains, and related database tables.
@@ -24,7 +24,7 @@ does it touch?"
   - raw SQL files
   - Java SQL string literals
 - Render a single self-contained offline HTML report.
-- Support Claude Code through a project-level or user-level subagent.
+- Ship as a skill (Codex plugin + Claude/Codex skill install) so agents run the CLI on demand.
 - Support both Spring and non-Spring Java projects through `--profile auto`.
 - Keep `codex-find` as a compatibility command while using `usage-trace` as the
   primary project name.
@@ -116,39 +116,48 @@ Compatibility command:
 codex-find --keyword orderId --root /path/to/your/java-project
 ```
 
-## Claude Code Agent
+## How it runs (CLI first)
 
-The Claude Code subagent definition lives at:
-
-```text
-.claude/agents/usage-trace.md
-```
-
-Install the CLI first:
+Analysis is done by the local **CLI**. You do **not** need an agent or skill
+to generate reports.
 
 ```bash
 python3 -m pip install -e .
+usage-trace --keyword orderId --root /path/to/your/java-project --profile auto
+open .usage-trace/orderId-report.html
 ```
 
-Install the agent into a specific Java project:
+| Piece | Role | Required? |
+|-------|------|-----------|
+| `usage-trace` CLI | Traces code and writes offline HTML | **Yes** |
+| Skill (`SKILL.md`) | Tells Codex/Claude/Cursor when/how to run the CLI | Optional |
+| Codex plugin | Distributes the skill via marketplace | Optional |
+
+Full ops guide (install, skill, FAQ): **[docs/skill-install.md](docs/skill-install.md)**.
+
+## Skill (optional, Claude / Codex / Cursor)
+
+Package as a **skill**, not a Claude Code subagent. Definition:
+
+```text
+skills/usage-trace/SKILL.md
+```
+
+CLI must still be installed first. Then:
 
 ```bash
-bash scripts/install-claude-agent.sh project /path/to/your/java-project
+bash scripts/install-skill.sh user              # Claude + agents + Cursor skill dirs
+bash scripts/install-skill.sh project /path/to/java-project
+bash scripts/install-skill.sh codex-user        # ~/.codex/skills only
 ```
 
-Or install it for your Claude Code user:
-
-```bash
-bash scripts/install-claude-agent.sh user
-```
-
-Then open Claude Code from the Java project root and ask:
+Then ask the assistant:
 
 ```text
 使用 usage-trace 分析当前项目的 orderId，生成 .usage-trace/orderId-report.html，并总结使用位置、调用链和涉及数据库表。
 ```
 
-The agent should run:
+It should run:
 
 ```bash
 usage-trace --keyword orderId --root . --profile auto --depth 4
@@ -255,13 +264,13 @@ python3 src/usage_trace.py \
 ## Project Layout
 
 ```text
-.claude/agents/usage-trace.md      Claude Code subagent definition
 .agents/plugins/marketplace.json   Codex repo marketplace
 .codex-plugin/plugin.json          Root Codex plugin manifest
-docs/claude-code-agent.md          Claude Code installation and usage guide
+docs/skill-install.md              Skill installation and usage guide
 plugins/usage-trace/               Thin Codex plugin wrapper for marketplace install
 profiles/                          Java analysis profiles
-scripts/install-claude-agent.sh    Claude Code agent installer
+scripts/install-skill.sh           Skill installer (user / project / codex-user)
+skills/usage-trace/SKILL.md        Skill definition (synced into plugin)
 src/                               CLI and analysis phases
 templates/report.html.tmpl         Offline report template
 tests/                             Unit, integration, and fixture tests
