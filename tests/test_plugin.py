@@ -22,7 +22,8 @@ def test_codex_plugin_manifest_exists_and_points_to_skills():
     assert manifest["interface"]["displayName"] == "usage-trace"
     assert "Trace field usage" in manifest["interface"]["shortDescription"]
     assert "查找字段使用情况" in manifest["interface"]["shortDescription"]
-    assert "usage-trace --keyword orderId" in manifest["interface"]["defaultPrompt"][0]
+    assert any("orderId" in p for p in manifest["interface"]["defaultPrompt"])
+    assert any("分析" in p for p in manifest["interface"]["defaultPrompt"])
 
 
 def test_codex_repo_marketplace_points_to_thin_plugin_directory():

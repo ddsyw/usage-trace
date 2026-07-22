@@ -6,8 +6,9 @@ SKILL = ROOT / "skills" / "usage-trace" / "SKILL.md"
 THIN_SKILL = ROOT / "plugins" / "usage-trace" / "skills" / "usage-trace" / "SKILL.md"
 DOC = ROOT / "docs" / "skill-install.md"
 INSTALLER = ROOT / "scripts" / "install-skill.sh"
-LEGACY_INSTALLER = ROOT / "scripts" / "install-claude-agent.sh"
 AGENT_LEGACY = ROOT / ".claude" / "agents" / "usage-trace.md"
+LEGACY_INSTALLER = ROOT / "scripts" / "install-claude-agent.sh"
+LEGACY_DOC = ROOT / "docs" / "claude-code-agent.md"
 
 
 def test_skill_file_exists_with_frontmatter():
@@ -25,6 +26,8 @@ def test_skill_mentions_cli_and_workflow():
         ".usage-trace/",
         "report.html",
         "Workflow",
+        "分析当前项目的 orderId",
+        "git+https://github.com/ddsyw/usage-trace.git",
     ]:
         assert needle in text, f"skill missing: {needle}"
 
@@ -36,29 +39,36 @@ def test_skill_copies_stay_in_sync():
 def test_skill_install_doc_exists():
     text = DOC.read_text(encoding="utf-8")
     for needle in [
-        "install-skill.sh",
-        "install.sh",
-        "~/.claude/skills",
+        "codex plugin",
+        "/plugin install",
+        "分析当前项目的 orderId",
         "usage-trace --keyword orderId --root .",
+        "git+https://github.com/ddsyw/usage-trace.git",
         "skill",
-        "symlink",
     ]:
         assert needle in text, f"skill install doc missing: {needle}"
+    assert "install-claude-agent" not in text
 
 
 def test_skill_installer_exists():
     text = INSTALLER.read_text(encoding="utf-8")
-    for needle in ["user", "project", "codex-user", "SKILL.md", "skills/usage-trace", "--symlink", "--copy"]:
+    for needle in [
+        "user",
+        "project",
+        "codex-user",
+        "SKILL.md",
+        "skills/usage-trace",
+        "--symlink",
+        "--copy",
+        "--skip-cli",
+        "pip install -e",
+    ]:
         assert needle in text, f"installer missing: {needle}"
 
 
-def test_legacy_agent_installer_redirects_to_skill():
-    text = LEGACY_INSTALLER.read_text(encoding="utf-8")
-    assert "install-skill.sh" in text
-    assert "deprecated" in text.lower()
-
-
-def test_no_claude_subagent_definition():
+def test_legacy_agent_artifacts_removed():
+    assert not LEGACY_INSTALLER.exists()
+    assert not LEGACY_DOC.exists()
     assert not AGENT_LEGACY.exists(), "subagent definition should be removed; use skill only"
 
 

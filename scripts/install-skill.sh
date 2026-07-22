@@ -1,24 +1,28 @@
 #!/usr/bin/env bash
-# Install usage-trace skill for Codex / Claude Code / Cursor.
-# Default: symlink into agent skill dirs so repo updates apply immediately.
+# Install usage-trace skill for Codex / Claude Code / Cursor, and install the CLI.
+# Default: symlink skill into agent skill dirs so repo updates apply immediately.
 set -euo pipefail
 
 usage() {
   cat <<'USAGE'
 Usage:
-  install-skill.sh [--symlink|--copy] user              # all user-level skill dirs (Recommended)
-  install-skill.sh [--symlink|--copy] project [dir]     # all project-level skill dirs
-  install-skill.sh [--symlink|--copy] codex-user        # only ~/.codex/skills (or $CODEX_HOME)
-  install-skill.sh [--symlink|--copy] claude-user       # only ~/.claude/skills
-  install-skill.sh [--symlink|--copy] cursor-user       # only ~/.cursor/skills
-  install-skill.sh [--symlink|--copy] all               # alias of user
+  install-skill.sh [--symlink|--copy] [--skip-cli] user              # all user-level skill dirs (Recommended)
+  install-skill.sh [--symlink|--copy] [--skip-cli] project [dir]     # all project-level skill dirs
+  install-skill.sh [--symlink|--copy] [--skip-cli] codex-user        # only ~/.codex/skills (or $CODEX_HOME)
+  install-skill.sh [--symlink|--copy] [--skip-cli] claude-user       # only ~/.claude/skills
+  install-skill.sh [--symlink|--copy] [--skip-cli] cursor-user       # only ~/.cursor/skills
+  install-skill.sh [--symlink|--copy] [--skip-cli] all               # alias of user
 
-Installs skills/usage-trace for coding agents (not a Claude Code subagent).
+Installs skills/usage-trace for coding agents and (by default) the local usage-trace CLI.
 
 Link mode:
   --symlink   ln -sfn repo skills/usage-trace into each dest (default)
   --copy      copy SKILL.md into each dest
   USAGE_TRACE_SKILL_INSTALL=symlink|copy overrides the default
+
+CLI:
+  By default also runs: python3 -m pip install -e <repo>
+  --skip-cli  install skill only (no pip)
 
 Skill load paths (Agent Skills standard):
   Claude Code  ~/.claude/skills/  or  <project>/.claude/skills/
@@ -36,6 +40,7 @@ USAGE
 }
 
 link_mode="${USAGE_TRACE_SKILL_INSTALL:-symlink}"
+skip_cli=0
 args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -45,6 +50,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --copy)
       link_mode="copy"
+      shift
+      ;;
+    --skip-cli)
+      skip_cli=1
       shift
       ;;
     -h|--help|help)
@@ -100,6 +109,16 @@ install_one() {
   fi
 }
 
+install_cli() {
+  echo "Installing CLI (editable) from $repo_root ..."
+  python3 -m pip install -e "$repo_root"
+  if command -v usage-trace >/dev/null 2>&1; then
+    echo "  usage-trace -> $(command -v usage-trace)"
+  else
+    echo "  note: usage-trace not on PATH yet; open a new shell or check pip bin dir." >&2
+  fi
+}
+
 dests=()
 
 case "$mode" in
@@ -144,15 +163,15 @@ for d in "${dests[@]}"; do
   install_one "$d"
 done
 
+if [[ "$skip_cli" -eq 0 ]]; then
+  install_cli
+else
+  echo "Skipped CLI install (--skip-cli)."
+fi
+
 cat <<EOF
 
-CLI (required in the same shell the agent uses):
-
-  python3 -m pip install -e "$repo_root"
-  # or: bash scripts/install.sh cli
-  # verify: usage-trace --help
-
-Then ask (examples):
+Ask your coding agent (examples):
 
   查找 orderId 字段项目使用情况
   Trace storeNo call chain and database tables in the current project

@@ -1,8 +1,8 @@
 # AGENTS.md
 
-usage-trace is a Python CLI that traces a keyword's full usage across Java/Spring, Python, or C# codebases and produces a single offline HTML report. It ships as a coding-agent skill plus marketplace plugins for Codex / Claude Code / Cursor (not a Claude Code subagent).
+usage-trace is a Python CLI that traces a keyword's full usage across Java/Spring, Python, or C# codebases and produces a single offline HTML report. End users install it as a coding-agent **plugin + skill** for Codex / Claude Code / Cursor; natural-language prompts like `分析当前项目的 orderId` should auto-load the skill.
 
-## Quick start
+## Quick start (dev)
 
 ```bash
 python3 -m pip install -e ".[dev]"
@@ -52,17 +52,16 @@ skills/                 Skill definition (SKILL.md)
 .cursor-plugin/         Cursor plugin + marketplace manifests
 plugins/usage-trace/    thin multi-platform plugin wrapper for marketplace install
 .agents/plugins/        Codex repo marketplace manifest
-scripts/                install.sh, install-skill.sh, hooks/
+scripts/                maintainer install/sync helpers
 docs/                   guides (skill-install.md)
 ```
 
-
 ## Operations
 
-- Analysis runs via the local CLI (`usage-trace` / `python3 src/usage_trace.py`). Skill is optional glue for coding agents.
-- Ops guide: `docs/skill-install.md`. Unified install: `scripts/install.sh` (CLI + skill symlink). Skill-only: `scripts/install-skill.sh`.
-- Optional maintainer hook: `bash scripts/install.sh hooks` keeps thin plugin `SKILL.md` in sync.
-- `install-claude-agent.sh` is a deprecated wrapper that forwards to `install-skill.sh`.
+- **End users:** install the marketplace plugin, then ask in natural language (e.g. `分析当前项目的 orderId`). Skill auto-matches; CLI is installed via pip from GitHub if missing.
+- Ops guide: `docs/skill-install.md`.
+- Maintainer helpers: `bash scripts/install.sh` (local skill dirs + editable CLI), `bash scripts/install.sh sync`.
+- Keep `skills/usage-trace/SKILL.md` and `plugins/usage-trace/skills/usage-trace/SKILL.md` in sync.
 
 ## Conventions
 
@@ -74,5 +73,5 @@ docs/                   guides (skill-install.md)
   - Cursor: root `.cursor-plugin/` and `plugins/usage-trace/.cursor-plugin/`
   - Skill: `skills/usage-trace/SKILL.md` and `plugins/usage-trace/skills/usage-trace/SKILL.md`
   - Keep `version` identical across all plugin manifests.
-- All description fields should include Chinese trigger keywords (查找字段使用情况, 追踪调用链) so Chinese user queries reliably match the skill.
+- Description / defaultPrompt fields should include Chinese auto-trigger phrases such as `分析当前项目的 orderId`, `查找字段使用情况`, `追踪调用链`.
 - `codex-find` is a backwards-compatible alias for `usage-trace`; both map to the same entry point.

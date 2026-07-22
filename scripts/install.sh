@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
-# Unified usage-trace installer (P3): CLI + multi-platform skill + optional git hooks.
+# Unified usage-trace installer: skill (includes CLI) + optional git hooks.
 set -euo pipefail
 
 usage() {
   cat <<'USAGE'
 Usage:
-  install.sh                 # CLI (editable) + skill user dirs (symlink)  [Recommended]
+  install.sh                 # skill user dirs (symlink) + CLI  [Recommended]
   install.sh all             # same as default
-  install.sh cli             # python3 -m pip install -e .
-  install.sh skill [args...] # forward to install-skill.sh (default --symlink)
+  install.sh skill [args...] # forward to install-skill.sh (installs CLI too)
+  install.sh cli             # python3 -m pip install -e . only (dev/maintainer)
   install.sh hooks           # install optional repo pre-commit sync hook
   install.sh sync            # sync thin plugin skill copy from skills/
 
+Skill install always installs the local CLI unless you pass --skip-cli.
+
 Examples:
   bash scripts/install.sh
-  bash scripts/install.sh cli
   bash scripts/install.sh skill --copy user
+  bash scripts/install.sh skill codex-user
   bash scripts/install.sh hooks
 USAGE
 }
@@ -51,7 +53,6 @@ sync_copies() {
 
 case "$cmd" in
   all|"")
-    install_cli
     install_skill user
     ;;
   cli)

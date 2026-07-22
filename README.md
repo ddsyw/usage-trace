@@ -2,108 +2,116 @@
 
 [中文文档](README-CN.md)
 
-`usage-trace` is a local code-analysis CLI and coding-agent **skill** for tracing a
-field or identifier through a Java codebase. Given a keyword such as `orderId` or
-`storeNo`, it produces a single offline HTML report covering usage sites, call
-chains, and related database tables.
+`usage-trace` is a coding-agent **plugin + skill** for tracing a field or
+identifier through Java, Python, or C# codebases. After installing the plugin in
+Codex / Claude Code / Cursor, ask naturally:
 
-The project is designed for day-to-day codebase investigation: when you need to
-answer "where is this field used, what path does it flow through, and which table
-does it touch?"
+```text
+分析当前项目的 orderId
+```
+
+The skill auto-matches, ensures the local CLI is available, and writes a single
+offline HTML report covering usage sites, call chains, and related database tables.
 
 ## Features
 
-- Search keyword usages across Java projects with generated keyword variants.
+- Search keyword usages with generated naming variants.
 - Build a caller/callee graph around matched methods.
 - Classify layers such as Controller, Service, Repository, Entity, SQL, Table,
-  and plain Java package-based layers.
-- Resolve database table access from:
-  - MyBatis XML mapper SQL
-  - MyBatis annotation SQL
-  - JPA repository/entity mappings
-  - raw SQL files
-  - Java SQL string literals
+  and package/path-based layers.
+- Resolve database table access from language-specific sources (MyBatis, JPA,
+  SQLAlchemy, EF Core, raw SQL, string SQL, and more).
 - Render a single self-contained offline HTML report.
-- Ship as a skill (Codex / Claude Code / Cursor marketplace plugins + skill install) so agents run the CLI on demand.
-- Support both Spring and non-Spring Java projects through `--profile auto`.
+- Marketplace plugins for Codex / Claude Code / Cursor with auto skill matching.
+- Support Java, Python, and C# through `--profile auto`.
 - Keep `codex-find` as a compatibility command while using `usage-trace` as the
-  primary project name.
+  primary name.
 
-## Repository
+## Install (plugin only)
 
-```bash
-git clone https://github.com/ddsyw/usage-trace.git
-cd usage-trace
-```
-
-## Requirements
-
-- Python 3.10+
-- `pip`
-- `rg` / ripgrep is recommended for faster search. If it is unavailable, the
-  tool falls back to a Python search implementation.
-
-Install dependencies in editable mode:
+### Codex
 
 ```bash
-python3 -m pip install -e ".[dev]"
+codex plugin marketplace add ddsyw/usage-trace --ref main
+codex plugin add usage-trace@usage-trace
 ```
 
-## Quick Start
+Or open `/plugins` in Codex and install from the `usage-trace` marketplace.
 
-Run against the included Spring fixture:
+### Claude Code
+
+```text
+/plugin marketplace add ddsyw/usage-trace
+/plugin install usage-trace@usage-trace
+```
+
+### Cursor
+
+Local plugin install (recommended today):
+
+**Windows PowerShell** (from this repository root):
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.cursor\plugins\local\usage-trace" | Out-Null
+Copy-Item -Recurse -Force ".\plugins\usage-trace\*" "$env:USERPROFILE\.cursor\plugins\local\usage-trace\"
+```
+
+**macOS / Linux / Git Bash**:
 
 ```bash
-usage-trace \
-  --keyword storeNo \
-  --root tests/fixtures/java-spring
+mkdir -p ~/.cursor/plugins/local/usage-trace
+cp -R plugins/usage-trace/. ~/.cursor/plugins/local/usage-trace/
 ```
 
-Open the report:
+Confirm:
 
-```bash
-open .usage-trace/storeNo-report.html
+```text
+~/.cursor/plugins/local/usage-trace/.cursor-plugin/plugin.json
+~/.cursor/plugins/local/usage-trace/skills/usage-trace/SKILL.md
 ```
 
-You can also run the source entrypoint directly:
+Or follow Cursor Marketplace submission docs for the packaged plugin.
 
-```bash
-python3 src/usage_trace.py \
-  --keyword storeNo \
-  --root tests/fixtures/java-spring
+## Use (auto skill trigger)
+
+In the target project, ask in plain language — no need to name the skill:
+
+```text
+分析当前项目的 orderId
 ```
 
-## Analyze a Real Java Project
-
-From this repository:
-
-```bash
-usage-trace \
-  --keyword orderId \
-  --root /path/to/your/java-project \
-  --profile auto \
-  --depth 4
+```text
+查找 storeNo 字段项目使用情况，生成报告并总结调用链和表
 ```
 
-Then open:
-
-```bash
-open .usage-trace/orderId-report.html
+```text
+Trace userId usage, call chain, and related tables
 ```
 
-Use the actual project root, usually the directory containing `pom.xml`,
-`build.gradle`, or `src/main/java`.
+The agent should:
 
-## CLI Options
+1. Load the `usage-trace` skill automatically
+2. If `usage-trace` is missing, install the CLI once:
+   ```bash
+   python3 -m pip install -U "git+https://github.com/ddsyw/usage-trace.git"
+   ```
+3. Run:
+   ```bash
+   usage-trace --keyword orderId --root . --profile auto --depth 4
+   ```
+4. Summarize `.usage-trace/orderId-report.html`
+
+## What the agent runs (CLI reference)
 
 ```bash
 usage-trace --keyword <identifier> --root <project> [options]
 ```
 
 - `--keyword`: required keyword or field name, for example `orderId`.
-- `--root`: required target project root.
-- `--profile`: language profile. Default is `auto`; available Java profiles are
-  `java-spring` and `java-generic`.
+- `--root`: required target project root (`.` for current project).
+- `--profile`: language profile. Default is `auto`; profiles include
+  `java-spring`, `java-generic`, `python-sqlalchemy`, `python-generic`,
+  `csharp-ef`, `csharp-generic`.
 - `--depth`: call-chain depth. Default is `4`; the code applies a hard cap.
 - `--max-nodes`: maximum graph nodes rendered in the report. Default is `300`.
 - `--variants`: comma-separated extra keyword variants to search.
@@ -113,102 +121,10 @@ usage-trace --keyword <identifier> --root <project> [options]
 Compatibility command:
 
 ```bash
-codex-find --keyword orderId --root /path/to/your/java-project
+codex-find --keyword orderId --root /path/to/your/project
 ```
 
-## How it runs (CLI first)
-
-Analysis is done by the local **CLI**. You do **not** need an agent or skill
-to generate reports.
-
-```bash
-python3 -m pip install -e .
-usage-trace --keyword orderId --root /path/to/your/java-project --profile auto
-open .usage-trace/orderId-report.html
-```
-
-| Piece | Role | Required? |
-|-------|------|-----------|
-| `usage-trace` CLI | Traces code and writes offline HTML | **Yes** |
-| Skill (`SKILL.md`) | Tells Codex/Claude/Cursor when/how to run the CLI | Optional |
-| Marketplace plugin | Distributes the skill via Codex / Claude Code / Cursor marketplaces | Optional |
-
-Full ops guide (install, skill, FAQ): **[docs/skill-install.md](docs/skill-install.md)**.
-
-## Skill (optional, Claude / Codex / Cursor)
-
-Package as a **skill**, not a Claude Code subagent. Definition:
-
-```text
-skills/usage-trace/SKILL.md
-```
-
-CLI must still be installed first. Then:
-
-```bash
-bash scripts/install.sh                         # CLI + skill symlink (recommended)
-bash scripts/install-skill.sh user              # Claude + agents + Cursor skill dirs
-bash scripts/install-skill.sh project /path/to/java-project
-bash scripts/install-skill.sh codex-user        # ~/.codex/skills only
-```
-
-Then ask the assistant:
-
-```text
-使用 usage-trace 分析当前项目的 orderId，生成 .usage-trace/orderId-report.html，并总结使用位置、调用链和涉及数据库表。
-```
-
-It should run:
-
-```bash
-usage-trace --keyword orderId --root . --profile auto --depth 4
-```
-
-## Marketplace Plugins (optional)
-
-This repository ships multi-platform plugin metadata (skill only; CLI still required):
-
-```text
-.codex-plugin/plugin.json
-.claude-plugin/marketplace.json + plugin.json
-.cursor-plugin/marketplace.json + plugin.json
-.agents/plugins/marketplace.json
-plugins/usage-trace/.codex-plugin/
-plugins/usage-trace/.claude-plugin/
-plugins/usage-trace/.cursor-plugin/
-skills/usage-trace/SKILL.md
-```
-
-**Codex**
-
-```bash
-codex plugin marketplace add ddsyw/usage-trace --ref main
-codex plugin add usage-trace@usage-trace
-```
-
-Or open `/plugins` in Codex and install from the `usage-trace` marketplace.
-
-**Claude Code**
-
-```text
-/plugin marketplace add ddsyw/usage-trace
-/plugin install usage-trace@usage-trace
-```
-
-**Cursor**
-
-```bash
-bash scripts/install-skill.sh cursor-user
-# local plugin dev: copy plugins/usage-trace -> ~/.cursor/plugins/local/usage-trace
-```
-
-After installation, start a new agent thread and ask:
-
-```text
-Use usage-trace to analyze orderId in the current Java project and generate .usage-trace/orderId-report.html.
-```
-
-## Report Contents
+## Report contents
 
 The generated HTML report includes:
 
@@ -220,15 +136,15 @@ The generated HTML report includes:
   weighted edges, architecture layers, guided tour steps, and cross-layer
   relationship aggregation
 - a collapsed network overview
-- usage-site table with file, line, layer, occurrence type, and snippet
-- database table details with operation, source unit, source file, statement id,
-  and SQL snippet
-- MyBatis XML / SQL source statements, including unlinked statements for diagnostics
-- notes about truncation and inferred edges
+- usage-site details with file, line, layer, hit type, and snippets
+- database table details with operation type, source unit, source file,
+  statement id, and SQL snippets
+- MyBatis XML / SQL source diagnostics when present
+- truncation notes and inferred-edge notes
 
-The report is self-contained and does not require external assets.
+The report is a single offline HTML file with no external HTTP assets.
 
-## Support Matrix
+## Support matrix
 
 - Java/Spring:
   - keyword usage tracing
@@ -242,10 +158,14 @@ The report is self-contained and does not require external assets.
   - package/path-based layer classification
   - MyBatis XML mapper SQL
   - raw SQL files and Java SQL string literals
-- Non-Java languages:
-  - not supported for full call-chain tracing yet
+- Python (SQLAlchemy / generic):
+  - keyword usage + call-chain tracing (tree-sitter-python)
+  - `__tablename__` / `Table()` and SQL string table hints
+- C# (EF Core / generic):
+  - keyword usage + call-chain tracing (tree-sitter-c-sharp)
+  - `[Table]` / `ToTable` / `DbSet` and SQL string table hints
 
-## Debug Pipeline
+## Debug pipeline
 
 The single `usage-trace` command orchestrates these phases:
 
@@ -259,16 +179,16 @@ These scripts remain available for debugging individual phases.
 
 ## Development
 
-Run the full verification suite:
-
 ```bash
+git clone https://github.com/ddsyw/usage-trace.git
+cd usage-trace
+python3 -m pip install -e ".[dev]"
 python3 -m pytest
 python3 -m ruff check .
 python3 -m compileall -q src tests
-git diff --check
 ```
 
-Run a focused smoke test:
+Smoke test:
 
 ```bash
 python3 src/usage_trace.py \
@@ -276,24 +196,31 @@ python3 src/usage_trace.py \
   --root tests/fixtures/java-spring
 ```
 
+Maintainer helpers (not required for end users):
+
+```bash
+bash scripts/install.sh          # local skill dirs + editable CLI
+bash scripts/install.sh sync     # sync thin plugin SKILL.md
+```
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
-## Project Layout
+## Project layout
 
 ```text
 .agents/plugins/marketplace.json   Codex repo marketplace
 .codex-plugin/plugin.json          Root Codex plugin manifest
 .claude-plugin/                    Claude Code plugin + marketplace
 .cursor-plugin/                    Cursor plugin + marketplace
-docs/skill-install.md              Skill installation and usage guide
+docs/skill-install.md              Plugin install and usage guide
 plugins/usage-trace/               Thin multi-platform plugin wrapper
-profiles/                          Java analysis profiles
-scripts/install-skill.sh           Skill installer (user / project / codex-user)
+profiles/                          analysis profiles (java/python/csharp)
+scripts/                           Maintainer install/sync scripts
 skills/usage-trace/SKILL.md        Skill definition (synced into plugin)
 src/                               CLI and analysis phases
-templates/report.html.tmpl         Offline report template
+templates/report.html.tmpl         offline report template
 tests/                             Unit, integration, and fixture tests
 ```
 
@@ -301,13 +228,5 @@ tests/                             Unit, integration, and fixture tests
 
 - The call graph is static and heuristic; reflection, runtime proxies, dynamic
   SQL generation, and complex dependency injection may require manual review.
-- Non-Java projects are not supported for full tracing yet.
 - Very large projects may need a lower `--max-nodes` value or narrower keyword
   variants to keep reports readable.
-
-- Python (SQLAlchemy / generic):
-  - keyword usage + call-chain tracing (tree-sitter-python)
-  - `__tablename__` / `Table()` and SQL string table hints
-- C# (EF Core / generic):
-  - keyword usage + call-chain tracing (tree-sitter-c-sharp)
-  - `[Table]` / `ToTable` / `DbSet` and SQL string table hints
