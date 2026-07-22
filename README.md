@@ -276,6 +276,10 @@ python3 src/usage_trace.py \
   --root tests/fixtures/java-spring
 ```
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
+
 ## Project Layout
 
 ```text

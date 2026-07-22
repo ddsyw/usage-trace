@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "usage-trace",
-      "version": "0.1.0+codex.20260722210000",
+      "version": "0.2.0+codex.20260722220000",
       "source": {
         "source": "local",
         "path": "./plugins/usage-trace"

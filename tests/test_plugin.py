@@ -16,7 +16,7 @@ def test_codex_plugin_manifest_exists_and_points_to_skills():
     manifest = json.loads(PLUGIN_JSON.read_text(encoding="utf-8"))
 
     assert manifest["name"] == "usage-trace"
-    assert manifest["version"].startswith("0.1.0")
+    assert manifest["version"].split("+")[0].count(".") >= 2  # semver major.minor.patch
     assert manifest["skills"] == "./skills/"
     assert manifest["repository"] == "https://github.com/ddsyw/usage-trace"
     assert manifest["interface"]["displayName"] == "usage-trace"

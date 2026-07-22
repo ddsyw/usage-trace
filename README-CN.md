@@ -269,6 +269,10 @@ python3 src/usage_trace.py \
   --root tests/fixtures/java-spring
 ```
 
+## 变更日志
+
+见 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 项目结构
 
 ```text
