@@ -250,6 +250,44 @@
   [data-persona="pm"] .ni-source,
   [data-persona="pm"] .ni-rel,
   [data-persona="pm"] .ni-complexity{display:none}
+  /* ---- T4 polish ---- */
+  /* fuzzy-match highlight in search results */
+  .result-item strong mark{
+    background:var(--accent-soft);color:var(--accent);border-radius:3px;
+    padding:0 1px;font-weight:700;
+  }
+  /* keyboard focus rings — token-driven, visible only for keyboard nav */
+  button:focus-visible,input:focus-visible,.layer-tab:focus-visible,
+  .result-item:focus-visible,.node-jump:focus-visible,.path-lane:focus-visible,
+  .tour-step:focus-visible,.link-list button:focus-visible,.layer-chip:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-sm);
+  }
+  /* slim token-driven scrollbars (WebKit + Firefox) */
+  *{scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:var(--r-pill);border:2px solid transparent;background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--muted);background-clip:padding-box;border:2px solid transparent}
+  /* table polish — denser rows, sticky headers, zebra striping */
+  .details table,.panel-section table{border-radius:var(--r);overflow:hidden}
+  .details th,.panel-section th{
+    position:sticky;top:0;z-index:1;background:var(--panel-2);
+    font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+  }
+  .details tbody tr:nth-child(even),.panel-section tbody tr:nth-child(even){background:var(--panel-2)}
+  .details tbody tr:hover,.panel-section tbody tr:hover{background:var(--accent-soft)}
+  .details td code,.panel-section td code{font-size:var(--fs-xs)}
+  /* panorama / table / usages sections */
+  .details details{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r);padding:var(--sp-2) var(--sp-3)}
+  .details details[open]{padding-bottom:var(--sp-3)}
+  .details details>summary{list-style:none;display:inline-flex;align-items:center;gap:6px}
+  .details details>summary::-webkit-details-marker{display:none}
+  .details details>summary:before{content:"▸";color:var(--accent);font-size:var(--fs-sm);transition:transform .15s}
+  .details details[open]>summary:before{transform:rotate(90deg)}
+  .details details svg{margin-top:var(--sp-2);border-radius:var(--r);background:var(--stage)}
+  .panel-section+.panel-section{padding-top:var(--sp-4)}
+  /* search results subtle rank affordance */
+  .result-item:hover strong mark{background:var(--accent);color:var(--panel)}
   @media (max-width:980px){
     .shell{height:auto;min-height:100vh;overflow:visible}
     header{align-items:flex-start;flex-direction:column}
@@ -628,19 +666,80 @@
     applyFocus(id);
     if (focus) focusNode(id);
   }
+  // fuzzy subsequence scoring (T4): rewards consecutive + early + word-boundary matches
+  function fuzzyScore(query, target){
+    if (!query || target == null) return null;
+    const q = String(query).toLowerCase();
+    const t = String(target).toLowerCase();
+    if (!q || !t) return null;
+    let qi = 0, ti = 0, prev = -2, consec = 0, score = 0;
+    const positions = [];
+    while (qi < q.length && ti < t.length){
+      if (q.charCodeAt(qi) === t.charCodeAt(ti)){
+        positions.push(ti);
+        if (ti === 0) score += 30;
+        else {
+          const c = t.charCodeAt(ti - 1);
+          // word-boundary bonus when previous char is non-alnum / underscore
+          if (!((c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95)) score += 15;
+        }
+        if (ti === prev + 1){ consec += 1; score += 8 + consec * 5; }
+        else { consec = 0; score += 1; }
+        prev = ti;
+        qi += 1;
+      }
+      ti += 1;
+    }
+    if (qi < q.length) return null;
+    if (positions.length === t.length && q.length === t.length) score += 40; // exact match
+    score += Math.max(0, 12 - (t.length - q.length)); // brevity bonus
+    return { score, positions };
+  }
+  function scoreNode(query, node){
+    let best = null;
+    for (const value of [node.label, node.id, node.layer, node.table]){
+      if (!value) continue;
+      const result = fuzzyScore(query, value);
+      if (result && (!best || result.score > best.score)) best = result;
+    }
+    return best;
+  }
+  function highlightLabel(text, positions){
+    if (!text) return "";
+    if (!positions || !positions.length) return esc(text);
+    const set = new Set(positions);
+    let html = "", buf = "", inMatch = false;
+    for (let i = 0; i < text.length; i++){
+      const m = set.has(i);
+      if (m !== inMatch){
+        if (buf) html += inMatch ? `<mark>${esc(buf)}</mark>` : esc(buf);
+        buf = "";
+        inMatch = m;
+      }
+      buf += text[i];
+    }
+    if (buf) html += inMatch ? `<mark>${esc(buf)}</mark>` : esc(buf);
+    return html;
+  }
   function runSearch(){
     const q = search.value.trim().toLowerCase();
-    const matches = q
-      ? nodes.filter((node) => [node.label, node.id, node.layer, node.kind, node.table]
-          .filter(Boolean).some((value) => String(value).toLowerCase().includes(q)))
+    const scored = q
+      ? nodes
+          .map((node) => ({ node, result: scoreNode(q, node) }))
+          .filter((entry) => entry.result)
+          .sort((a, b) => b.result.score - a.result.score)
       : [];
-    const hitIds = new Set(matches.map((node) => node.id));
+    const hitIds = new Set(scored.map((entry) => entry.node.id));
     document.querySelectorAll(".graph-node").forEach((el) => {
       el.classList.toggle("search-hit", hitIds.has(el.dataset.nodeId));
     });
-    results.innerHTML = matches.slice(0, 8).map((node) =>
-      `<button type="button" class="result-item" data-node-id="${esc(node.id)}"><strong>${esc(node.label || node.id)}</strong><span>${esc(node.layer || "")}</span></button>`
-    ).join("");
+    results.innerHTML = scored.slice(0, 8).map((entry) => {
+      const node = entry.node;
+      const label = node.label || node.id;
+      const labelHit = fuzzyScore(q, label);
+      const positions = labelHit ? labelHit.positions : [];
+      return `<button type="button" class="result-item" data-node-id="${esc(node.id)}"><strong>${highlightLabel(label, positions)}</strong><span>${esc(node.layer || "")}</span></button>`;
+    }).join("");
     results.querySelectorAll("[data-node-id]").forEach((button) => {
       button.addEventListener("click", () => selectNode(button.dataset.nodeId, true));
     });
@@ -751,6 +850,30 @@
     if (v) savedPersona = v;
   } catch (_){}
   applyPersona(savedPersona, false);
+
+  // ---- theme toggle (T4) ----
+  const THEME_KEY = "usage-trace-theme";
+  const THEMES = ["light", "dark"];
+  const themeToggle = document.getElementById("theme-toggle");
+  function applyTheme(id){
+    const safe = THEMES.indexOf(id) >= 0 ? id : "light";
+    document.documentElement.dataset.theme = safe;
+    try { localStorage.setItem(THEME_KEY, safe); } catch (_){}
+    const isDark = safe === "dark";
+    themeToggle.textContent = isDark ? "浅色" : "深色";
+    themeToggle.setAttribute("aria-pressed", String(isDark));
+    themeToggle.setAttribute("aria-label", isDark ? "切换到浅色主题" : "切换到深色主题");
+  }
+  themeToggle.addEventListener("click", () => {
+    const current = document.documentElement.dataset.theme || "light";
+    applyTheme(current === "dark" ? "light" : "dark");
+  });
+  let savedTheme = "light";
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    if (v) savedTheme = v;
+  } catch (_){}
+  applyTheme(savedTheme);
 
   setViewBox();
   applyMainPathView();
