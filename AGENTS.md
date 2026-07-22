@@ -1,6 +1,6 @@
 # AGENTS.md
 
-usage-trace is a Python CLI that traces a keyword's full usage across a Java/Spring codebase and produces a single offline HTML report. It ships as a Codex plugin and a coding-agent skill (not a Claude Code subagent).
+usage-trace is a Python CLI that traces a keyword's full usage across a Java/Spring codebase and produces a single offline HTML report. It ships as a coding-agent skill plus marketplace plugins for Codex / Claude Code / Cursor (not a Claude Code subagent).
 
 ## Quick start
 
@@ -48,8 +48,10 @@ templates/              HTML report template
 tests/                  unit tests, e2e tests, and fixture projects
 skills/                 Skill definition (SKILL.md)
 .codex-plugin/          Codex plugin manifest
-plugins/usage-trace/    thin plugin wrapper for marketplace install
-.agents/plugins/        repo marketplace manifest
+.claude-plugin/         Claude Code plugin + marketplace manifests
+.cursor-plugin/         Cursor plugin + marketplace manifests
+plugins/usage-trace/    thin multi-platform plugin wrapper for marketplace install
+.agents/plugins/        Codex repo marketplace manifest
 scripts/                install-skill.sh
 docs/                   guides (skill-install.md)
 ```
@@ -65,6 +67,11 @@ docs/                   guides (skill-install.md)
 
 - Keep changes scoped to the module being touched; don't refactor unrelated code.
 - The report must be a single offline HTML file with no external HTTP assets.
-- When editing plugin.json or SKILL.md, update both copies (root `.codex-plugin/` and `plugins/usage-trace/.codex-plugin/`), and keep `skills/usage-trace/SKILL.md` in sync with `plugins/usage-trace/skills/usage-trace/SKILL.md`.
+- When editing plugin.json or SKILL.md, keep platform copies in sync:
+  - Codex: root `.codex-plugin/` and `plugins/usage-trace/.codex-plugin/`
+  - Claude Code: root `.claude-plugin/` and `plugins/usage-trace/.claude-plugin/`
+  - Cursor: root `.cursor-plugin/` and `plugins/usage-trace/.cursor-plugin/`
+  - Skill: `skills/usage-trace/SKILL.md` and `plugins/usage-trace/skills/usage-trace/SKILL.md`
+  - Keep `version` identical across all plugin manifests.
 - All description fields should include Chinese trigger keywords (查找字段使用情况, 追踪调用链) so Chinese user queries reliably match the skill.
 - `codex-find` is a backwards-compatible alias for `usage-trace`; both map to the same entry point.

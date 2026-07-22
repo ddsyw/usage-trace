@@ -1,0 +1,21 @@
+{
+  "name": "usage-trace",
+  "version": "0.1.0+codex.20260722164500",
+  "description": "Trace Java field usage, call chains, and database tables with an offline HTML report. Supports Chinese queries: 查找字段使用情况, 追踪调用链, 字段流向.",
+  "author": {
+    "name": "ddsyw",
+    "url": "https://github.com/ddsyw"
+  },
+  "homepage": "https://github.com/ddsyw/usage-trace",
+  "repository": "https://github.com/ddsyw/usage-trace",
+  "keywords": [
+    "java",
+    "code-analysis",
+    "call-chain",
+    "database",
+    "skill",
+    "claude-plugin",
+    "字段使用情况",
+    "调用链追踪"
+  ]
+}

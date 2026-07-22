@@ -120,7 +120,7 @@ open .usage-trace/orderId-report.html
 |------|------|----------|
 | `usage-trace` CLI | 追踪代码并写离线 HTML | **必须** |
 | Skill（`SKILL.md`） | 告诉 Codex/Claude/Cursor 何时、如何调用 CLI | 可选 |
-| Codex plugin | 通过 marketplace 分发 skill | 可选 |
+| Marketplace plugin | 通过 Codex / Claude Code / Cursor marketplace 分发 skill | 可选 |
 
 完整操作说明（安装、Skill、FAQ）：**[docs/skill-install.md](docs/skill-install.md)**。
 
@@ -152,31 +152,45 @@ bash scripts/install-skill.sh codex-user        # 仅 ~/.codex/skills
 usage-trace --keyword orderId --root . --profile auto --depth 4
 ```
 
-## Codex Plugin 用法
+## Marketplace Plugin 用法（可选）
 
-当前仓库也包含 Codex plugin 元数据和 repo marketplace：
+当前仓库包含多平台 plugin 元数据（只分发 skill；CLI 仍须单独安装）：
 
 ```text
 .codex-plugin/plugin.json
+.claude-plugin/marketplace.json + plugin.json
+.cursor-plugin/marketplace.json + plugin.json
 .agents/plugins/marketplace.json
-plugins/usage-trace/.codex-plugin/plugin.json
+plugins/usage-trace/.codex-plugin/
+plugins/usage-trace/.claude-plugin/
+plugins/usage-trace/.cursor-plugin/
 skills/usage-trace/SKILL.md
 ```
 
-先添加 repo marketplace：
+**Codex**
 
 ```bash
 codex plugin marketplace add ddsyw/usage-trace --ref main
-```
-
-然后在 Codex 中打开 `/plugins`，从 `usage-trace` marketplace 安装
-`usage-trace`。也可以使用 CLI 安装：
-
-```bash
 codex plugin add usage-trace@usage-trace
 ```
 
-安装后建议开启一个新的 Codex 会话，然后输入：
+或在 Codex 中打开 `/plugins`，从 `usage-trace` marketplace 安装。
+
+**Claude Code**
+
+```text
+/plugin marketplace add ddsyw/usage-trace
+/plugin install usage-trace@usage-trace
+```
+
+**Cursor**
+
+```bash
+bash scripts/install-skill.sh cursor-user
+# 本地开发：复制 plugins/usage-trace 到 ~/.cursor/plugins/local/usage-trace
+```
+
+安装后建议新开会话，然后输入：
 
 ```text
 使用 usage-trace 分析当前 Java 项目的 orderId，并生成 .usage-trace/orderId-report.html。
@@ -252,8 +266,10 @@ python3 src/usage_trace.py \
 ```text
 .agents/plugins/marketplace.json   Codex repo marketplace
 .codex-plugin/plugin.json          根目录 Codex plugin manifest
+.claude-plugin/                    Claude Code plugin + marketplace
+.cursor-plugin/                    Cursor plugin + marketplace
 docs/skill-install.md              Skill 安装与使用说明
-plugins/usage-trace/               用于 marketplace 安装的 thin Codex plugin
+plugins/usage-trace/               用于 marketplace 安装的 多平台 thin plugin
 profiles/                          Java 分析 profile
 scripts/install-skill.sh           Skill 安装脚本（user / project / codex-user）
 skills/usage-trace/SKILL.md        Skill 定义（与 plugin 内副本保持同步）

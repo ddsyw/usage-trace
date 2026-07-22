@@ -24,7 +24,7 @@ does it touch?"
   - raw SQL files
   - Java SQL string literals
 - Render a single self-contained offline HTML report.
-- Ship as a skill (Codex plugin + Claude/Codex skill install) so agents run the CLI on demand.
+- Ship as a skill (Codex / Claude Code / Cursor marketplace plugins + skill install) so agents run the CLI on demand.
 - Support both Spring and non-Spring Java projects through `--profile auto`.
 - Keep `codex-find` as a compatibility command while using `usage-trace` as the
   primary project name.
@@ -131,7 +131,7 @@ open .usage-trace/orderId-report.html
 |-------|------|-----------|
 | `usage-trace` CLI | Traces code and writes offline HTML | **Yes** |
 | Skill (`SKILL.md`) | Tells Codex/Claude/Cursor when/how to run the CLI | Optional |
-| Codex plugin | Distributes the skill via marketplace | Optional |
+| Marketplace plugin | Distributes the skill via Codex / Claude Code / Cursor marketplaces | Optional |
 
 Full ops guide (install, skill, FAQ): **[docs/skill-install.md](docs/skill-install.md)**.
 
@@ -163,31 +163,45 @@ It should run:
 usage-trace --keyword orderId --root . --profile auto --depth 4
 ```
 
-## Codex Plugin
+## Marketplace Plugins (optional)
 
-This repository also includes Codex plugin metadata and a repo marketplace:
+This repository ships multi-platform plugin metadata (skill only; CLI still required):
 
 ```text
 .codex-plugin/plugin.json
+.claude-plugin/marketplace.json + plugin.json
+.cursor-plugin/marketplace.json + plugin.json
 .agents/plugins/marketplace.json
-plugins/usage-trace/.codex-plugin/plugin.json
+plugins/usage-trace/.codex-plugin/
+plugins/usage-trace/.claude-plugin/
+plugins/usage-trace/.cursor-plugin/
 skills/usage-trace/SKILL.md
 ```
 
-Add the repo marketplace:
+**Codex**
 
 ```bash
 codex plugin marketplace add ddsyw/usage-trace --ref main
-```
-
-Then open `/plugins` in Codex and install `usage-trace` from the
-`usage-trace` marketplace. CLI alternative:
-
-```bash
 codex plugin add usage-trace@usage-trace
 ```
 
-After installation, start a new Codex thread and ask:
+Or open `/plugins` in Codex and install from the `usage-trace` marketplace.
+
+**Claude Code**
+
+```text
+/plugin marketplace add ddsyw/usage-trace
+/plugin install usage-trace@usage-trace
+```
+
+**Cursor**
+
+```bash
+bash scripts/install-skill.sh cursor-user
+# local plugin dev: copy plugins/usage-trace -> ~/.cursor/plugins/local/usage-trace
+```
+
+After installation, start a new agent thread and ask:
 
 ```text
 Use usage-trace to analyze orderId in the current Java project and generate .usage-trace/orderId-report.html.
@@ -266,8 +280,10 @@ python3 src/usage_trace.py \
 ```text
 .agents/plugins/marketplace.json   Codex repo marketplace
 .codex-plugin/plugin.json          Root Codex plugin manifest
+.claude-plugin/                    Claude Code plugin + marketplace
+.cursor-plugin/                    Cursor plugin + marketplace
 docs/skill-install.md              Skill installation and usage guide
-plugins/usage-trace/               Thin Codex plugin wrapper for marketplace install
+plugins/usage-trace/               Thin multi-platform plugin wrapper
 profiles/                          Java analysis profiles
 scripts/install-skill.sh           Skill installer (user / project / codex-user)
 skills/usage-trace/SKILL.md        Skill definition (synced into plugin)

@@ -1,0 +1,17 @@
+{
+  "name": "usage-trace",
+  "owner": {
+    "name": "ddsyw",
+    "url": "https://github.com/ddsyw"
+  },
+  "metadata": {
+    "description": "usage-trace marketplace for Claude Code: Java field usage / call-chain tracing (查找字段使用情况, 追踪调用链)."
+  },
+  "plugins": [
+    {
+      "name": "usage-trace",
+      "source": "./plugins/usage-trace",
+      "description": "Trace Java field usage, call chains, and database tables with an offline HTML report. Supports Chinese queries: 查找字段使用情况, 追踪调用链, 字段流向."
+    }
+  ]
+}

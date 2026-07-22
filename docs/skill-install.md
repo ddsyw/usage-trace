@@ -6,7 +6,7 @@
 |------|------|----------|
 | **CLI** (`usage-trace`) | 分析 Java 代码并生成离线 HTML 报告 | **必须** |
 | **Skill** (`SKILL.md`) | 告诉 Codex / Claude / Cursor 何时、如何调用 CLI | 可选 |
-| **Codex plugin** | 通过 marketplace 分发 skill | 可选 |
+| **Marketplace plugin** | 通过 Codex / Claude Code / Cursor marketplace 分发 skill | 可选 |
 
 **不再提供** Claude Code subagent（`.claude/agents/`）。旧脚本 `install-claude-agent.sh` 会转发到 skill 安装。
 
@@ -118,9 +118,11 @@ usage-trace --keyword orderId --root . --profile auto --depth 4
 
 ---
 
-## 3. Codex Plugin 路径
+## 3. Marketplace Plugin 路径
 
-本仓库也是 Codex plugin marketplace 入口。Skill 定义在 `skills/usage-trace/SKILL.md`。
+本仓库同时提供 **Codex / Claude Code / Cursor** marketplace 元数据。Skill 权威副本在 `skills/usage-trace/SKILL.md`。
+
+### Codex
 
 ```bash
 codex plugin marketplace add ddsyw/usage-trace --ref main
@@ -128,6 +130,25 @@ codex plugin add usage-trace@usage-trace
 ```
 
 或在 Codex 中打开 `/plugins`，从 `usage-trace` marketplace 安装。
+
+### Claude Code
+
+```text
+/plugin marketplace add ddsyw/usage-trace
+/plugin install usage-trace@usage-trace
+```
+
+### Cursor
+
+仓库包含 `.cursor-plugin/marketplace.json` 与 `plugins/usage-trace/.cursor-plugin/plugin.json`，可按 Cursor 文档提交到官方 Marketplace，或本地开发安装：
+
+```bash
+# 本地测试：把 thin plugin 同步到 Cursor local plugins 目录
+mkdir -p ~/.cursor/plugins/local/usage-trace
+cp -R plugins/usage-trace/. ~/.cursor/plugins/local/usage-trace/
+```
+
+也可继续用 `install-skill.sh cursor-user` 只装 skill（不走 plugin 体系）。
 
 装好后建议新开会话。**CLI 仍需单独 `pip install -e .`**；plugin 只带 skill 说明，不替代分析二进制。
 
@@ -171,5 +192,10 @@ plugins/usage-trace/skills/.../SKILL.md  plugin 内同步副本
 scripts/install-skill.sh                 Skill 安装脚本
 scripts/install-claude-agent.sh          已废弃，转发到 install-skill.sh
 .codex-plugin/plugin.json                Codex plugin manifest
-.agents/plugins/marketplace.json         仓库 marketplace
+.claude-plugin/                          Claude Code plugin + marketplace
+.cursor-plugin/                          Cursor plugin + marketplace
+.agents/plugins/marketplace.json         Codex 仓库 marketplace
+plugins/usage-trace/.codex-plugin/       Codex thin plugin manifest
+plugins/usage-trace/.claude-plugin/      Claude thin plugin manifest
+plugins/usage-trace/.cursor-plugin/      Cursor thin plugin manifest
 ```
