@@ -1,6 +1,6 @@
 # AGENTS.md
 
-usage-trace is a Python CLI that traces a keyword's full usage across Java/Spring, Python, or C# codebases and produces a single offline HTML report. End users install it as a coding-agent **plugin + skill** for Codex / Claude Code / Cursor; natural-language prompts like `分析当前项目的 orderId` should auto-load the skill.
+usage-trace is a Python CLI that traces a keyword's full usage across Java/Spring, Python, or C# codebases and produces a single offline HTML report. End users install it as a **Cursor skill**; natural-language prompts like `分析当前项目的 orderId` should auto-load the skill.
 
 ## Quick start (dev)
 
@@ -46,32 +46,21 @@ src/                    CLI and analysis phases
 profiles/               analysis profiles (java-*, python-*, csharp-*)
 templates/              HTML report template
 tests/                  unit tests, e2e tests, and fixture projects
-skills/                 Skill definition (SKILL.md)
-.codex-plugin/          Codex plugin manifest
-.claude-plugin/         Claude Code plugin + marketplace manifests
-.cursor-plugin/         Cursor plugin + marketplace manifests
-plugins/usage-trace/    thin multi-platform plugin wrapper for marketplace install
-.agents/plugins/        Codex repo marketplace manifest
-scripts/                maintainer install/sync helpers
+skills/                 Cursor skill definition (SKILL.md)
+scripts/                maintainer install helpers
 docs/                   guides (skill-install.md)
 ```
 
 ## Operations
 
-- **End users:** install the marketplace plugin, then ask in natural language (e.g. `分析当前项目的 orderId`). Skill auto-matches; CLI is installed via pip from GitHub if missing.
+- **End users:** install the Cursor skill (`~/.cursor/skills/usage-trace/SKILL.md`), then ask in natural language (e.g. `分析当前项目的 orderId`). Skill auto-matches; CLI is installed via pip from GitHub if missing.
 - Ops guide: `docs/skill-install.md`.
-- Maintainer helpers: `bash scripts/install.sh` (local skill dirs + editable CLI), `bash scripts/install.sh sync`.
-- Keep `skills/usage-trace/SKILL.md` and `plugins/usage-trace/skills/usage-trace/SKILL.md` in sync.
+- Maintainer helpers: `bash scripts/install.sh` (Cursor skill dirs + editable CLI).
+- Skill authority: only `skills/usage-trace/SKILL.md` (no plugin copies).
 
 ## Conventions
 
 - Keep changes scoped to the module being touched; don't refactor unrelated code.
 - The report must be a single offline HTML file with no external HTTP assets.
-- When editing plugin.json or SKILL.md, keep platform copies in sync:
-  - Codex: root `.codex-plugin/` and `plugins/usage-trace/.codex-plugin/`
-  - Claude Code: root `.claude-plugin/` and `plugins/usage-trace/.claude-plugin/`
-  - Cursor: root `.cursor-plugin/` and `plugins/usage-trace/.cursor-plugin/`
-  - Skill: `skills/usage-trace/SKILL.md` and `plugins/usage-trace/skills/usage-trace/SKILL.md`
-  - Keep `version` identical across all plugin manifests.
-- Description / defaultPrompt fields should include Chinese auto-trigger phrases such as `分析当前项目的 orderId`, `查找字段使用情况`, `追踪调用链`.
-- `codex-find` is a backwards-compatible alias for `usage-trace`; both map to the same entry point.
+- No multi-platform plugin packaging; Cursor skill-only distribution.
+- Skill description should include Chinese auto-trigger phrases such as `分析当前项目的 orderId`, `查找字段使用情况`, `追踪调用链`.

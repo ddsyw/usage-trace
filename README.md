@@ -2,9 +2,9 @@
 
 [中文文档](README-CN.md)
 
-`usage-trace` is a coding-agent **plugin + skill** for tracing a field or
-identifier through Java, Python, or C# codebases. After installing the plugin in
-Codex / Claude Code / Cursor, ask naturally:
+`usage-trace` is a **Cursor skill** (+ local CLI) for tracing a field or identifier
+through Java, Python, or C# codebases. After installing the skill in Cursor, ask
+naturally:
 
 ```text
 分析当前项目的 orderId
@@ -22,55 +22,69 @@ offline HTML report covering usage sites, call chains, and related database tabl
 - Resolve database table access from language-specific sources (MyBatis, JPA,
   SQLAlchemy, EF Core, raw SQL, string SQL, and more).
 - Render a single self-contained offline HTML report.
-- Marketplace plugins for Codex / Claude Code / Cursor with auto skill matching.
+- Cursor skill auto-matching for natural-language prompts.
 - Support Java, Python, and C# through `--profile auto`.
-- Keep `codex-find` as a compatibility command while using `usage-trace` as the
-  primary name.
 
-## Install (plugin only)
+## Install (Cursor skill)
 
-### Codex
+Cursor loads skills from `~/.cursor/skills/<name>/SKILL.md` (or project-level
+`.cursor/skills/`). You only need the skill file — **plugin packaging is not required**.
+
+### One command (recommended)
+
+From this repository root:
 
 ```bash
-codex plugin marketplace add ddsyw/usage-trace --ref main
-codex plugin add usage-trace@usage-trace
+bash scripts/install.sh
 ```
 
-Or open `/plugins` in Codex and install from the `usage-trace` marketplace.
+This symlinks `skills/usage-trace` into `~/.cursor/skills/usage-trace` (and
+`~/.agents/skills/usage-trace`, which Cursor also reads) and installs the local
+CLI in editable mode.
 
-### Claude Code
+Cursor-only skill dir:
 
-```text
-/plugin marketplace add ddsyw/usage-trace
-/plugin install usage-trace@usage-trace
+```bash
+bash scripts/install.sh skill cursor-user
 ```
 
-### Cursor
+Copy instead of symlink:
 
-Local plugin install (recommended today):
-
-**Windows PowerShell** (from this repository root):
-
-```powershell
-New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.cursor\plugins\local\usage-trace" | Out-Null
-Copy-Item -Recurse -Force ".\plugins\usage-trace\*" "$env:USERPROFILE\.cursor\plugins\local\usage-trace\"
+```bash
+bash scripts/install.sh skill --copy cursor-user
 ```
+
+### Manual install
 
 **macOS / Linux / Git Bash**:
 
 ```bash
-mkdir -p ~/.cursor/plugins/local/usage-trace
-cp -R plugins/usage-trace/. ~/.cursor/plugins/local/usage-trace/
+mkdir -p ~/.cursor/skills/usage-trace
+cp skills/usage-trace/SKILL.md ~/.cursor/skills/usage-trace/SKILL.md
+# optional: install CLI
+python3 -m pip install -U "git+https://github.com/ddsyw/usage-trace.git"
+```
+
+Or symlink the whole skill directory (keeps updates in sync with this repo):
+
+```bash
+ln -sfn "$(pwd)/skills/usage-trace" ~/.cursor/skills/usage-trace
+```
+
+**Windows PowerShell** (from this repository root):
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.cursor\skills\usage-trace" | Out-Null
+Copy-Item -Force ".\skills\usage-trace\SKILL.md" "$env:USERPROFILE\.cursor\skills\usage-trace\SKILL.md"
 ```
 
 Confirm:
 
 ```text
-~/.cursor/plugins/local/usage-trace/.cursor-plugin/plugin.json
-~/.cursor/plugins/local/usage-trace/skills/usage-trace/SKILL.md
+~/.cursor/skills/usage-trace/SKILL.md
 ```
 
-Or follow Cursor Marketplace submission docs for the packaged plugin.
+Then restart Cursor or open a new Agent session.
 
 ## Use (auto skill trigger)
 
@@ -118,12 +132,6 @@ usage-trace --keyword <identifier> --root <project> [options]
 - `--out`: optional output HTML path. Default is `.usage-trace/<keyword>-report.html`
   in the current directory.
 
-Compatibility command:
-
-```bash
-codex-find --keyword orderId --root /path/to/your/project
-```
-
 ## Report contents
 
 The generated HTML report includes:
@@ -159,23 +167,20 @@ The report is a single offline HTML file with no external HTTP assets.
   - MyBatis XML mapper SQL
   - raw SQL files and Java SQL string literals
 - Python (SQLAlchemy / generic):
-  - keyword usage + call-chain tracing (tree-sitter-python)
-  - `__tablename__` / `Table()` and SQL string table hints
+  - keyword usage + call-chain graph
+  - `__tablename__` / `Table(...)` style table resolution
+  - query/select oriented table hints when present
 - C# (EF Core / generic):
-  - keyword usage + call-chain tracing (tree-sitter-c-sharp)
-  - `[Table]` / `ToTable` / `DbSet` and SQL string table hints
+  - keyword usage + call-chain graph
+  - `[Table]`, `ToTable`, `DbSet`, `FromSqlRaw` oriented table resolution
 
 ## Debug pipeline
 
-The single `usage-trace` command orchestrates these phases:
-
-1. `src/discover.py`: discover keyword usage sites
-2. `src/trace.py`: build the call graph
-3. `src/tables.py`: resolve database tables
-4. `src/graph.py`: prune and layout graph nodes
-5. `src/render.py`: render the offline HTML report
-
-These scripts remain available for debugging individual phases.
+1. `src/discover.py` finds keyword usage sites.
+2. `src/trace.py` builds the call-chain graph.
+3. `src/tables.py` resolves database tables.
+4. `src/graph.py` prunes and layouts graph nodes.
+5. `src/render.py` writes the offline HTML report.
 
 ## Development
 
@@ -199,34 +204,26 @@ python3 src/usage_trace.py \
 Maintainer helpers (not required for end users):
 
 ```bash
-bash scripts/install.sh          # local skill dirs + editable CLI
-bash scripts/install.sh sync     # sync thin plugin SKILL.md
+bash scripts/install.sh
+bash scripts/install.sh skill --copy cursor-user
 ```
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for release history.
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Project layout
 
 ```text
-.agents/plugins/marketplace.json   Codex repo marketplace
-.codex-plugin/plugin.json          Root Codex plugin manifest
-.claude-plugin/                    Claude Code plugin + marketplace
-.cursor-plugin/                    Cursor plugin + marketplace
-docs/skill-install.md              Plugin install and usage guide
-plugins/usage-trace/               Thin multi-platform plugin wrapper
-profiles/                          analysis profiles (java/python/csharp)
-scripts/                           Maintainer install/sync scripts
-skills/usage-trace/SKILL.md        Skill definition (synced into plugin)
-src/                               CLI and analysis phases
-templates/report.html.tmpl         offline report template
-tests/                             Unit, integration, and fixture tests
+skills/usage-trace/SKILL.md     Cursor skill definition
+src/                            CLI and analysis phases
+profiles/                       analysis profiles (java-*, python-*, csharp-*)
+templates/                      HTML report template
+tests/                          unit tests, e2e tests, and fixture projects
+scripts/                        maintainer install helpers
+docs/                           guides (skill-install.md)
 ```
 
-## Limitations
+## Ops
 
-- The call graph is static and heuristic; reflection, runtime proxies, dynamic
-  SQL generation, and complex dependency injection may require manual review.
-- Very large projects may need a lower `--max-nodes` value or narrower keyword
-  variants to keep reports readable.
+End-user install and trigger guide: [docs/skill-install.md](docs/skill-install.md).

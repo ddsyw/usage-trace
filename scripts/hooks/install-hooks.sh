@@ -33,4 +33,3 @@ fi
 
 ln -sfn "$hook_src" "$hook_dst"
 echo "installed pre-commit hook -> $hook_src"
-echo "it syncs plugins/usage-trace/skills/usage-trace/SKILL.md from skills/"

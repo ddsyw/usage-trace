@@ -3,12 +3,12 @@
 ## Unreleased
 
 ### Packaging & ops
-- End-user path is **marketplace / local plugin install** (Codex, Claude Code, Cursor)
+- **Cursor skill-only distribution**: install `skills/usage-trace/SKILL.md` into `~/.cursor/skills`; no plugin/marketplace packaging
+- Removed Codex / Claude Code / Cursor plugin manifests and thin plugin wrapper
 - Natural language like `分析当前项目的 orderId` auto-triggers the skill
 - Missing CLI is installed by the skill via `pip install git+https://github.com/ddsyw/usage-trace.git`
-- Maintainer `install-skill.sh` also installs the CLI by default (`--skip-cli` to opt out)
-- Cursor install docs include Windows PowerShell and macOS/Linux steps
-- Removed deprecated `scripts/install-claude-agent.sh` and `docs/claude-code-agent.md`
+- Maintainer `install-skill.sh` targets Cursor skill dirs (and `~/.agents/skills` which Cursor also loads)
+- README / docs only document Cursor skill install (Windows PowerShell + macOS/Linux)
 
 ## 0.2.0 — 2026-07-22
 

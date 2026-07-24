@@ -7,7 +7,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 INSTALL_SH = ROOT / "scripts" / "install.sh"
 INSTALL_SKILL = ROOT / "scripts" / "install-skill.sh"
-SYNC = ROOT / "scripts" / "sync-plugin-copies.sh"
 PRE_COMMIT = ROOT / "scripts" / "hooks" / "pre-commit"
 INSTALL_HOOKS = ROOT / "scripts" / "hooks" / "install-hooks.sh"
 LEGACY_AGENT_INSTALLER = ROOT / "scripts" / "install-claude-agent.sh"
@@ -62,8 +61,9 @@ def _bash() -> str:
 
 def test_unified_install_script_exists():
     text = INSTALL_SH.read_text(encoding="utf-8")
-    for needle in ["cli", "skill", "hooks", "sync", "install-skill.sh"]:
+    for needle in ["cli", "skill", "hooks", "install-skill.sh"]:
         assert needle in text, f"install.sh missing: {needle}"
+    assert "sync-plugin" not in text
     assert "install_skill user" in text or 'install_skill "$@"' in text
 
 
@@ -77,15 +77,18 @@ def test_skill_installer_supports_symlink_copy_and_cli():
         "USAGE_TRACE_SKILL_INSTALL",
         "pip install -e",
         "install_cli",
+        "cursor-user",
+        ".cursor/skills",
     ]:
         assert needle in text, f"install-skill.sh missing: {needle}"
+    assert "codex-user" not in text
+    assert "claude-user" not in text
 
 
-def test_sync_and_hook_scripts_exist():
-    assert SYNC.is_file()
+def test_hook_scripts_exist():
     assert PRE_COMMIT.is_file()
     assert INSTALL_HOOKS.is_file()
-    assert "sync-plugin-copies" in PRE_COMMIT.read_text(encoding="utf-8")
+    assert not (ROOT / "scripts" / "sync-plugin-copies.sh").exists()
 
 
 def test_legacy_agent_paths_removed():
@@ -99,33 +102,30 @@ def test_install_skill_symlink_and_copy_modes():
         env = {
             **os.environ,
             "HOME": str(home),
-            "CODEX_HOME": str(home / ".codex"),
         }
         subprocess.run(
-            [_bash(), str(INSTALL_SKILL), "--skip-cli", "--symlink", "claude-user"],
+            [_bash(), str(INSTALL_SKILL), "--skip-cli", "--symlink", "cursor-user"],
             check=True,
             env=env,
             cwd=ROOT,
         )
-        dest = home / ".claude" / "skills" / "usage-trace"
+        dest = home / ".cursor" / "skills" / "usage-trace"
         assert dest.is_symlink() or (dest / "SKILL.md").is_file()
         assert (dest / "SKILL.md").is_file()
 
         subprocess.run(
-            [_bash(), str(INSTALL_SKILL), "--skip-cli", "--copy", "cursor-user"],
+            [_bash(), str(INSTALL_SKILL), "--skip-cli", "--copy", "agents-user"],
             check=True,
             env=env,
             cwd=ROOT,
         )
-        copy_dest = home / ".cursor" / "skills" / "usage-trace" / "SKILL.md"
+        copy_dest = home / ".agents" / "skills" / "usage-trace" / "SKILL.md"
         assert copy_dest.is_file()
-        assert not (home / ".cursor" / "skills" / "usage-trace").is_symlink()
+        assert not (home / ".agents" / "skills" / "usage-trace").is_symlink()
 
 
-def test_sync_plugin_copies_is_idempotent():
-    subprocess.run([_bash(), str(SYNC)], check=True, cwd=ROOT)
-    src = (ROOT / "skills" / "usage-trace" / "SKILL.md").read_text(encoding="utf-8")
-    dst = (ROOT / "plugins" / "usage-trace" / "skills" / "usage-trace" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    assert src == dst
+def test_skill_authority_is_single_copy():
+    skill = ROOT / "skills" / "usage-trace" / "SKILL.md"
+    assert skill.is_file()
+    assert not (ROOT / "plugins").exists()
+    assert not (ROOT / ".cursor-plugin").exists()

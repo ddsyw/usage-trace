@@ -2,8 +2,7 @@
 
 [English README](README.md)
 
-`usage-trace` 以编码助手 **插件 + Skill** 形式提供。在 Codex / Claude Code / Cursor
-安装插件后，直接在目标项目里说：
+`usage-trace` 以 **Cursor Skill**（+ 本地 CLI）形式提供。把 skill 装进 Cursor 后，直接在目标项目里说：
 
 ```text
 分析当前项目的 orderId
@@ -18,54 +17,68 @@
 - 识别 Controller、Service、Repository、Entity、SQL、Table 等层级。
 - 解析多种数据库访问来源（MyBatis、JPA、SQLAlchemy、EF Core、原始 SQL、字符串 SQL 等）。
 - 生成单文件离线 HTML 报告，不依赖外部资源。
-- 通过 Codex / Claude Code / Cursor 插件市场安装；自然语言自动触发 skill。
+- 通过 Cursor skill 安装；自然语言自动触发。
 - 通过 `--profile auto` 支持 Java、Python、C#。
-- 兼容旧命令名 `codex-find`。
 
-## 安装（仅插件）
+## 安装（Cursor skill）
 
-### Codex
+Cursor 从 `~/.cursor/skills/<name>/SKILL.md`（或项目级 `.cursor/skills/`）加载 skill。  
+**只需要 skill 文件，不需要插件包装。**
+
+### 一条命令（推荐）
+
+在本仓库根目录：
 
 ```bash
-codex plugin marketplace add ddsyw/usage-trace --ref main
-codex plugin add usage-trace@usage-trace
+bash scripts/install.sh
 ```
 
-或在 Codex 中打开 `/plugins`，从 `usage-trace` marketplace 安装。
+会把 `skills/usage-trace` 软链到 `~/.cursor/skills/usage-trace`（以及 Cursor 也会读取的
+`~/.agents/skills/usage-trace`），并 editable 安装本地 CLI。
 
-### Claude Code
+只装 Cursor skill 目录：
 
-```text
-/plugin marketplace add ddsyw/usage-trace
-/plugin install usage-trace@usage-trace
+```bash
+bash scripts/install.sh skill cursor-user
 ```
 
-### Cursor
+复制而不是软链：
 
-本地安装 thin plugin（当前推荐）：
-
-**Windows PowerShell**（在本仓库根目录执行）：
-
-```powershell
-New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.cursor\plugins\local\usage-trace" | Out-Null
-Copy-Item -Recurse -Force ".\plugins\usage-trace\*" "$env:USERPROFILE\.cursor\plugins\local\usage-trace\"
+```bash
+bash scripts/install.sh skill --copy cursor-user
 ```
+
+### 手动安装
 
 **macOS / Linux / Git Bash**：
 
 ```bash
-mkdir -p ~/.cursor/plugins/local/usage-trace
-cp -R plugins/usage-trace/. ~/.cursor/plugins/local/usage-trace/
+mkdir -p ~/.cursor/skills/usage-trace
+cp skills/usage-trace/SKILL.md ~/.cursor/skills/usage-trace/SKILL.md
+# 可选：安装 CLI
+python3 -m pip install -U "git+https://github.com/ddsyw/usage-trace.git"
+```
+
+或软链整个 skill 目录（与仓库保持同步）：
+
+```bash
+ln -sfn "$(pwd)/skills/usage-trace" ~/.cursor/skills/usage-trace
+```
+
+**Windows PowerShell**（在本仓库根目录）：
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.cursor\skills\usage-trace" | Out-Null
+Copy-Item -Force ".\skills\usage-trace\SKILL.md" "$env:USERPROFILE\.cursor\skills\usage-trace\SKILL.md"
 ```
 
 确认存在：
 
 ```text
-~/.cursor/plugins/local/usage-trace/.cursor-plugin/plugin.json
-~/.cursor/plugins/local/usage-trace/skills/usage-trace/SKILL.md
+~/.cursor/skills/usage-trace/SKILL.md
 ```
 
-也可按 Cursor 文档提交到官方 Marketplace。
+然后 **重启 Cursor 或新开 Agent 会话**。
 
 ## 使用（自动触发 Skill）
 
@@ -110,12 +123,6 @@ usage-trace --keyword <identifier> --root <project> [options]
 - `--max-nodes`：报告中最多渲染的图节点数量，默认 `300`。
 - `--variants`：额外关键字变体，逗号分隔。
 - `--out`：可选输出 HTML 路径，默认 `.usage-trace/<keyword>-report.html`。
-
-兼容旧命令：
-
-```bash
-codex-find --keyword orderId --root /path/to/your/project
-```
 
 ## 报告内容
 
@@ -168,7 +175,7 @@ python3 src/usage_trace.py \
 
 ```bash
 bash scripts/install.sh
-bash scripts/install.sh sync
+bash scripts/install.sh skill --copy cursor-user
 ```
 
 ## 变更日志
@@ -178,21 +185,15 @@ bash scripts/install.sh sync
 ## 项目结构
 
 ```text
-.agents/plugins/marketplace.json   Codex repo marketplace
-.codex-plugin/plugin.json          根目录 Codex plugin manifest
-.claude-plugin/                    Claude Code plugin + marketplace
-.cursor-plugin/                    Cursor plugin + marketplace
-docs/skill-install.md              插件安装与使用说明
-plugins/usage-trace/               多平台 thin plugin
-profiles/                          分析 profile
-scripts/                           维护者脚本
-skills/usage-trace/SKILL.md        Skill 定义
-src/                               CLI 与分析阶段
-templates/report.html.tmpl         离线报告模板
-tests/                             测试与示例项目
+skills/usage-trace/SKILL.md     Cursor skill 定义
+src/                            CLI 与分析阶段
+profiles/                       语言 profile
+templates/                      HTML 报告模板
+tests/                          测试与 fixture
+scripts/                        维护者安装脚本
+docs/                           操作说明（skill-install.md）
 ```
 
-## 限制
+## 运维
 
-- 调用链是静态启发式分析；反射、运行时代理、动态 SQL 和复杂依赖注入可能需要人工复核。
-- 超大项目可降低 `--max-nodes` 或收窄关键字变体，让报告更易读。
+终端用户安装与触发说明见 [docs/skill-install.md](docs/skill-install.md)。

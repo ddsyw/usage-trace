@@ -55,9 +55,9 @@ Supported profiles:
 
 ## Ensure CLI is available
 
-The skill is distributed by Codex / Claude Code / Cursor **plugins**. The analysis
-engine is the local `usage-trace` command. Before the first run in a session, ensure
-the CLI works:
+The skill is installed as a **Cursor skill** (`~/.cursor/skills/usage-trace/SKILL.md`).
+The analysis engine is the local `usage-trace` command. Before the first run in a
+session, ensure the CLI works:
 
 ```bash
 usage-trace --help
@@ -117,10 +117,9 @@ usage-trace --keyword orderId --root . --out .usage-trace/orderId-report.html
 
 ## Notes
 
-- Install path for end users: marketplace / plugin install in Codex, Claude Code, or Cursor.
+- Install path for end users: Cursor skill dir only (see `docs/skill-install.md`). Plugin packaging is not required.
 - Report is a **single offline HTML** (no external HTTP assets).
 - Chinese triggers: 分析当前项目, 查找字段使用情况, 追踪调用链, 字段流向, 涉及哪些表.
-- Compatibility command: `codex-find` is an alias of `usage-trace`.
 
 ## Docs
 

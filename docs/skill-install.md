@@ -1,69 +1,69 @@
-# usage-trace 操作说明
+# usage-trace 操作说明（Cursor skill）
 
-`usage-trace` 以 **插件 + Skill** 形式提供给编码助手（Codex / Claude Code / Cursor）。
+`usage-trace` 以 **Cursor skill + 本地 CLI** 形式提供。
 
 用户侧只做两件事：
 
-1. 在助手里 **安装 usage-trace 插件**
+1. 把 `skills/usage-trace/SKILL.md` 装到 Cursor 的 skill 目录
 2. 在目标项目里直接说需求，例如：`分析当前项目的 orderId`
 
-助手会 **自动匹配并加载 skill**，必要时自动安装本地 CLI，然后生成离线 HTML 报告。
+Cursor 会 **自动匹配并加载 skill**，必要时自动安装本地 CLI，然后生成离线 HTML 报告。
 
 | 组件 | 作用 |
 |------|------|
-| **Marketplace plugin** | 在 Codex / Claude Code / Cursor 中安装 skill |
 | **Skill** (`SKILL.md`) | 匹配用户意图并指导助手如何分析 |
 | **CLI** (`usage-trace`) | 本地分析引擎；skill 首次运行时若缺失会 `pip install` 安装 |
 
+> 不需要插件包装或市场清单。Cursor 只要能读到 skill 文件即可。
+
 ---
 
-## 1. 安装插件（唯一推荐用户路径）
+## 1. 安装 skill（唯一推荐用户路径）
 
-### Codex
+### 一条命令（推荐）
+
+在本仓库根目录：
 
 ```bash
-codex plugin marketplace add ddsyw/usage-trace --ref main
-codex plugin add usage-trace@usage-trace
+bash scripts/install.sh
 ```
 
-或在 Codex 中打开 `/plugins`，从 `usage-trace` marketplace 安装。
-
-### Claude Code
-
-```text
-/plugin marketplace add ddsyw/usage-trace
-/plugin install usage-trace@usage-trace
-```
-
-### Cursor
-
-把本仓库的 thin plugin 装到 Cursor 本地插件目录（当前推荐方式）。
-
-**Windows PowerShell**（在 usage-trace 仓库根目录执行）：
-
-```powershell
-New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.cursor\plugins\local\usage-trace" | Out-Null
-Copy-Item -Recurse -Force ".\plugins\usage-trace\*" "$env:USERPROFILE\.cursor\plugins\local\usage-trace\"
-```
+### 手动安装
 
 **macOS / Linux / Git Bash**：
 
 ```bash
-mkdir -p ~/.cursor/plugins/local/usage-trace
-cp -R plugins/usage-trace/. ~/.cursor/plugins/local/usage-trace/
+mkdir -p ~/.cursor/skills/usage-trace
+cp skills/usage-trace/SKILL.md ~/.cursor/skills/usage-trace/SKILL.md
 ```
 
-确认目录中至少包含：
+或软链：
+
+```bash
+ln -sfn "$(pwd)/skills/usage-trace" ~/.cursor/skills/usage-trace
+```
+
+**Windows PowerShell**：
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.cursor\skills\usage-trace" | Out-Null
+Copy-Item -Force ".\skills\usage-trace\SKILL.md" "$env:USERPROFILE\.cursor\skills\usage-trace\SKILL.md"
+```
+
+确认：
 
 ```text
-~/.cursor/plugins/local/usage-trace/.cursor-plugin/plugin.json
-~/.cursor/plugins/local/usage-trace/skills/usage-trace/SKILL.md
+~/.cursor/skills/usage-trace/SKILL.md
 ```
 
 然后 **重启 Cursor 或新开 Agent 会话**。  
-也可按 Cursor 官方流程把本仓库 marketplace 提交到 Cursor Marketplace。
-
 装好后在**业务项目**里提问（不必在 usage-trace 仓库内）。
+
+CLI 若缺失，skill 会提示安装：
+
+```bash
+python3 -m pip install -U "git+https://github.com/ddsyw/usage-trace.git"
+```
 
 ---
 
@@ -107,8 +107,6 @@ Trace userId usage, call chain, and related tables
 | `--variants` | 否 | — | 额外关键字变体，逗号分隔 |
 | `--out` | 否 | `.usage-trace/<keyword>-report.html` | 输出 HTML 路径 |
 
-兼容旧命令名：`codex-find`。
-
 ---
 
 ## 3. 报告内容
@@ -118,47 +116,22 @@ Trace userId usage, call chain, and related tables
 - 关键字命中位置（含命名变体）
 - 调用链图（层 → 类 → 方法）
 - 涉及数据库表与 SQL 片段
-- 交互面板（搜索、主题、节点详情）
+- 交互式分层 dashboard
 
 ---
 
-## 4. 常见问题
-
-**Q: 一定要先跑仓库里的 install 脚本吗？**  
-A: **不需要。** 用户路径是插件安装 + 自然语言提问。CLI 由 skill 在首次分析时按需 `pip install`。
-
-**Q: 助手没有自动用 skill？**  
-A: 确认插件已安装并新开了会话；提问尽量包含字段名 + 分析意图（分析 / 查找使用情况 / 调用链 / 涉及表）。Cursor 用户请确认 `~/.cursor/plugins/local/usage-trace/skills/usage-trace/SKILL.md` 存在。
-
-**Q: 助手报找不到 `usage-trace`？**  
-A: 让助手按 skill 执行  
-`python3 -m pip install -U "git+https://github.com/ddsyw/usage-trace.git"`，  
-然后重试；确认使用同一 shell 环境。
-
-**Q: 支持哪些语言？**  
-A: Java、Python、C#（见上表 profile）。`--profile auto` 自动选择。
-
----
-
-## 5. 维护者说明（非终端用户）
-
-仓库开发者可用：
+## 4. 维护者说明（非终端用户）
 
 ```bash
-bash scripts/install.sh              # 本地开发：skill 目录 + editable CLI
-bash scripts/install.sh sync         # 同步 thin plugin 内 SKILL.md
-bash scripts/install.sh hooks        # 可选 pre-commit 同步
+bash scripts/install.sh                 # Cursor skill 目录 + editable CLI
+bash scripts/install.sh skill cursor-user
+bash scripts/install.sh hooks           # 可选 pre-commit
 ```
 
 相关路径：
 
 ```text
-skills/usage-trace/SKILL.md              Skill 定义（权威副本）
-plugins/usage-trace/skills/.../SKILL.md  plugin 内同步副本
-.codex-plugin/plugin.json                Codex plugin manifest
-.claude-plugin/                          Claude Code plugin + marketplace
-.cursor-plugin/                          Cursor plugin + marketplace
-.agents/plugins/marketplace.json         Codex 仓库 marketplace
-plugins/usage-trace/                     多平台 thin plugin 包装
-scripts/                                 维护者安装/同步脚本
+skills/usage-trace/SKILL.md    Skill 定义（唯一权威副本）
+scripts/install-skill.sh       安装到 ~/.cursor/skills
+src/                           分析引擎
 ```
